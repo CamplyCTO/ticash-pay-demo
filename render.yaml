@@ -1,0 +1,24 @@
+# Render Blueprint — deploys the Phase 1 demo as a single stateless web service
+# (in-memory store, seeded on boot, Basic Auth). Free plan; sleeps when idle.
+#
+# If this repo's root is the PARENT of ticash-pay, uncomment `rootDir` below.
+services:
+  - type: web
+    name: ticash-pay-demo
+    runtime: docker
+    plan: free
+    # rootDir: ticash-pay
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: STORE
+        value: memory
+      - key: SEED
+        value: "1"
+      - key: HOST
+        value: 0.0.0.0
+      - key: BASIC_AUTH_USER
+        value: ticash
+      - key: BASIC_AUTH_PASS
+        sync: false   # set the value in the Render dashboard (kept out of git)

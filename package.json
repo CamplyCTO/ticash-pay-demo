@@ -1,0 +1,32 @@
+{
+  "name": "ticash-pay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ticash Pay — Phase 1 financial core (auditable append-only double-entry ledger)",
+  "license": "UNLICENSED",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo": "tsx src/demo/run-demo.ts",
+    "migrate": "tsx src/db/migrate.ts",
+    "dev": "tsx watch src/api/server.ts",
+    "start": "node dist/api/server.js",
+    "screenshot": "node screenshot.mjs"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.11.6",
+    "fast-check": "^3.19.0",
+    "playwright": "^1.61.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^1.6.0"
+  }
+}

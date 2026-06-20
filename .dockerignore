@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+*.log
+coverage
+admin-screenshot.png
+screenshot.mjs
+test
+pgtmp
+.git

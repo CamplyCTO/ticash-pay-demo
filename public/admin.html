@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ticash Pay · Painel Admin</title>
+<style>
+  :root {
+    --bg-0:#0a0f12; --bg-1:#111a1b; --bg-2:#17231f; --bg-3:#20302a; --border:#2a3a36;
+    --text:#f4f4f5; --text-3:#9ca3af; --text-4:#6b7280;
+    --emerald:#34d399; --emerald-deep:#059669; --emerald-bg:#0f3325;
+    --gold:#e8c167; --blue:#60a5fa; --amber:#fbbf24; --red:#f87171;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,"Segoe UI",Inter,sans-serif; background:linear-gradient(180deg,var(--bg-0),var(--bg-1)); color:var(--text); padding:20px 24px 60px; min-height:100vh; }
+  .mono { font-family:"JetBrains Mono",ui-monospace,monospace; }
+  header.page { max-width:1280px; margin:0 auto 18px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  header.page h1 { font-size:19px; font-weight:700; }
+  header.page h1 .accent { color:var(--emerald); }
+  header.page .status { font-size:11px; color:var(--text-3); }
+  header.page .status b { color:var(--emerald); }
+  main { max-width:1280px; margin:0 auto; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .kpi { background:var(--bg-1); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+  .kpi .v { font-size:22px; font-weight:800; }
+  .kpi .l { font-size:10px; color:var(--text-4); margin-top:3px; text-transform:uppercase; letter-spacing:.4px; }
+  .grid { display:grid; grid-template-columns:1.3fr 1fr; gap:18px; align-items:start; }
+  .panel { background:var(--bg-1); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:18px; }
+  .panel > h2 { background:#000; color:var(--emerald); padding:10px 16px; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+  .panel .body { padding:14px 16px; }
+  table { width:100%; border-collapse:collapse; }
+  th { font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-4); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  td { font-size:11px; padding:7px 8px; border-bottom:1px solid var(--border); color:var(--text); }
+  td.mono, th.num { text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; }
+  td.num { text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; }
+  tr:last-child td { border-bottom:none; }
+  .cr { color:var(--emerald); } .db { color:var(--amber); }
+  .chip { font-size:8.5px; font-weight:600; padding:2px 8px; border-radius:20px; }
+  .chip.blue{background:#12233f;color:var(--blue);} .chip.em{background:var(--emerald-bg);color:var(--emerald);}
+  .chip.gold{background:#3a2f12;color:var(--gold);} .chip.amber{background:#3a2a08;color:var(--amber);}
+  .chip.gray{background:var(--bg-3);color:var(--text-3);} .chip.red{background:#3f0f15;color:var(--red);}
+  .recon { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .recon .box { background:var(--bg-2); border:1px solid var(--border); border-radius:9px; padding:11px; }
+  .recon .box .k { font-size:9px; color:var(--text-4); text-transform:uppercase; }
+  .recon .box .val { font-size:15px; font-weight:800; margin-top:3px; }
+  .ok { color:var(--emerald); } .bad { color:var(--red); }
+  form.ops { display:grid; gap:8px; }
+  form.ops .row { display:flex; gap:6px; }
+  select, input { background:var(--bg-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:8px 10px; font-size:12px; flex:1; min-width:0; }
+  button { background:var(--emerald-deep); color:#fff; border:none; border-radius:8px; padding:9px 12px; font-size:12px; font-weight:700; cursor:pointer; }
+  button:hover { background:var(--emerald); }
+  .tabs { display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .tab { background:var(--bg-2); border:1px solid var(--border); color:var(--text-3); border-radius:8px; padding:6px 12px; font-size:11px; cursor:pointer; }
+  .tab.active { background:var(--emerald-bg); color:var(--emerald); border-color:var(--emerald-deep); }
+  .toast { position:fixed; bottom:18px; right:18px; background:var(--bg-3); border:1px solid var(--border); border-left:3px solid var(--emerald); padding:10px 14px; border-radius:8px; font-size:12px; opacity:0; transition:opacity .2s; max-width:360px; }
+  .toast.show { opacity:1; } .toast.err { border-left-color:var(--red); }
+  .muted { color:var(--text-4); font-size:11px; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Ticash Pay · <span class="accent">Painel Admin</span></h1>
+  <div class="status">ledger ao vivo · atualizado <b id="updated">—</b> · <span id="health">●</span></div>
+</header>
+
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="v" id="kpi-vol" style="color:var(--emerald)">—</div><div class="l">Lançamentos</div></div>
+    <div class="kpi"><div class="v" id="kpi-agents" style="color:var(--blue)">—</div><div class="l">Agentes</div></div>
+    <div class="kpi"><div class="v" id="kpi-customers" style="color:var(--gold)">—</div><div class="l">Clientes</div></div>
+    <div class="kpi"><div class="v" id="kpi-div">—</div><div class="l">Divergências</div></div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <div class="panel">
+        <h2>📒 Ledger append-only · ao vivo</h2>
+        <div class="body" style="max-height:340px; overflow:auto">
+          <table><thead><tr><th>Tx</th><th>Tipo</th><th>Conta</th><th class="num">Valor</th></tr></thead>
+          <tbody id="feed"></tbody></table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>💰 Saldos (saldo = Σ ledger)</h2>
+        <div class="body" style="max-height:300px; overflow:auto">
+          <table><thead><tr><th>Conta</th><th>Tipo</th><th class="num">Saldo</th></tr></thead>
+          <tbody id="balances"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <h2>🛡️ Compliance · reconciliação</h2>
+        <div class="body">
+          <div class="recon" id="recon"></div>
+          <div class="muted" style="margin-top:10px" id="recon-note"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>⚙️ Operações</h2>
+        <div class="body">
+          <div class="tabs" id="tabs"></div>
+          <div id="forms"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>👤 Clientes &amp; agentes · KYC</h2>
+        <div class="body" style="max-height:260px; overflow:auto">
+          <table><thead><tr><th>Cliente</th><th>KYC</th><th>Status</th></tr></thead><tbody id="customers"></tbody></table>
+          <table style="margin-top:10px"><thead><tr><th>Agente</th><th class="num">Limite float</th><th class="num">Comissão</th></tr></thead><tbody id="agents"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = ''; // same origin
+const $ = (id) => document.getElementById(id);
+const SCALE = { BRL:2, HTG:2, USD:2, DOP:2, USDT:6 };
+function fmt(minor, ccy) {
+  const s = SCALE[ccy] ?? 2; const neg = BigInt(minor) < 0n;
+  const abs = (neg ? -BigInt(minor) : BigInt(minor)).toString().padStart(s+1,'0');
+  const whole = abs.slice(0, -s) || '0'; const frac = abs.slice(-s);
+  return (neg?'-':'') + whole + (s? '.'+frac : '');
+}
+async function api(method, path, body) {
+  const r = await fetch(API + path, { method, headers: body?{'content-type':'application/json'}:{}, body: body?JSON.stringify(body):undefined });
+  const text = await r.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!r.ok) throw new Error((data && data.message) || ('HTTP ' + r.status));
+  return data;
+}
+function toast(msg, isErr) {
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isErr?' err':'');
+  setTimeout(() => t.className = 'toast', 2600);
+}
+const chipFor = (t) => ({transfer:'blue',payout:'em',cash_in:'em',cash_out:'amber',fund_wallet:'gray',float_topup:'gray'}[t] || 'gray');
+const kycChip = (s) => ({approved:'em',pending:'amber',review:'gold',rejected:'red'}[s] || 'gray');
+
+async function refresh() {
+  try {
+    const [feed, balances, recon, customers, agents] = await Promise.all([
+      api('GET','/ledger?limit=40'), api('GET','/balances'), api('GET','/reconciliation'),
+      api('GET','/customers'), api('GET','/agents'),
+    ]);
+    $('health').textContent = '● online'; $('health').style.color = 'var(--emerald)';
+    $('updated').textContent = new Date().toLocaleTimeString();
+
+    $('feed').innerHTML = feed.map(r => `<tr><td class="mono">${r.transactionUid.slice(0,8)}</td>
+      <td><span class="chip ${chipFor(r.type)}">${r.type}</span></td>
+      <td class="muted">${r.accountKey}</td>
+      <td class="num ${BigInt(r.amountMinor)<0n?'db':'cr'}">${BigInt(r.amountMinor)>0n?'+':''}${fmt(r.amountMinor,r.currency)} ${r.currency}</td></tr>`).join('') || '<tr><td colspan=4 class="muted">sem lançamentos</td></tr>';
+
+    $('balances').innerHTML = balances.map(b => `<tr><td class="muted">${b.accountKey}</td>
+      <td><span class="chip gray">${b.kind}</span></td>
+      <td class="num">${fmt(b.balanceMinor,b.currency)} ${b.currency}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">—</td></tr>';
+
+    const totals = Object.entries(recon.perCurrencyTotals);
+    $('recon').innerHTML = totals.map(([c,t]) => `<div class="box"><div class="k">Σ ${c}</div>
+      <div class="val ${t==='0'?'ok':'bad'}">${fmt(t,c)} ${t==='0'?'✓':'✗'}</div></div>`).join('') +
+      `<div class="box"><div class="k">Cache divergências</div><div class="val ${recon.cacheDivergences.length?'bad':'ok'}">${recon.cacheDivergences.length}</div></div>` +
+      `<div class="box"><div class="k">Resultado</div><div class="val ${recon.balanced&&recon.consistent?'ok':'bad'}">${recon.balanced&&recon.consistent?'✓ bate':'✗ erro'}</div></div>`;
+    $('recon-note').textContent = recon.balanced && recon.consistent ? 'Cada centavo rastreável · saldo confere com o ledger.' : 'DIVERGÊNCIA detectada — investigar.';
+
+    $('kpi-vol').textContent = feed.length; $('kpi-agents').textContent = agents.length;
+    $('kpi-customers').textContent = customers.length;
+    $('kpi-div').textContent = recon.cacheDivergences.length;
+    $('kpi-div').style.color = recon.cacheDivergences.length ? 'var(--red)' : 'var(--emerald)';
+
+    $('customers').innerHTML = customers.map(c => `<tr><td>${c.externalId}</td>
+      <td><span class="chip ${kycChip(c.kycStatus)}">${c.kycStatus} · L${c.kycLevel}</span></td>
+      <td class="muted">${c.status}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">nenhum cliente</td></tr>';
+    $('agents').innerHTML = agents.map(a => `<tr><td>${a.externalId}</td>
+      <td class="num">${fmt(a.floatLimitMinor,'BRL')} BRL</td>
+      <td class="num">${(a.commissionBps/100).toFixed(2)}%</td></tr>`).join('') || '<tr><td colspan=3 class="muted">nenhum agente</td></tr>';
+  } catch (e) {
+    $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';
+    toast(e.message, true);
+  }
+}
+
+// ---- operation forms ----
+const idem = () => 'ui-' + Date.now() + '-' + Math.floor(Math.random()*1e6);
+const FORMS = {
+  'Registrar cliente': { fields:[['externalId','id do cliente']], run:(v)=>api('POST','/customers',{externalId:v.externalId}) },
+  'Registrar agente': { fields:[['externalId','id do agente'],['floatLimit','limite (R$)']], run:(v)=>api('POST','/agents',{externalId:v.externalId, floatLimit:v.floatLimit||'0'}) },
+  'KYC': { fields:[['externalId','cliente'],['status','approved/pending/review/rejected']], run:(v)=>api('POST',`/customers/${v.externalId}/kyc`,{level:v.status==='approved'?2:1,status:v.status}) },
+  'Fund wallet': { fields:[['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
+  'Float top-up': { fields:[['agentId','agente'],['amount','valor (R$)']], run:(v)=>api('POST','/agents/float-topup',{agentId:v.agentId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
+  'Cash in': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-in',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
+  'Cash out': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-out',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
+  'Transfer BR→HT': { fields:[['senderId','remetente'],['recipientRef','destinatário'],['sendAmount','envia (R$)'],['feeAmount','taxa (R$)']], run:(v)=>api('POST','/transactions/transfer',{senderId:v.senderId,recipientRef:v.recipientRef,fromCurrency:'BRL',toCurrency:'HTG',sendAmount:v.sendAmount,feeAmount:v.feeAmount||'0',rate:'24.36',idempotencyKey:idem()}) },
+};
+let activeForm = Object.keys(FORMS)[0];
+function renderTabs() {
+  $('tabs').innerHTML = Object.keys(FORMS).map(k => `<div class="tab ${k===activeForm?'active':''}" data-k="${k}">${k}</div>`).join('');
+  document.querySelectorAll('.tab').forEach(t => t.onclick = () => { activeForm = t.dataset.k; renderTabs(); renderForm(); });
+}
+function renderForm() {
+  const f = FORMS[activeForm];
+  $('forms').innerHTML = `<form class="ops" id="opform">
+    ${f.fields.map(([n,ph]) => `<input name="${n}" placeholder="${ph}" autocomplete="off" />`).join('')}
+    <button type="submit">Executar · ${activeForm}</button></form>`;
+  $('opform').onsubmit = async (e) => {
+    e.preventDefault();
+    const v = Object.fromEntries(new FormData(e.target).entries());
+    try { await f.run(v); toast('✓ ' + activeForm + ' ok'); e.target.reset(); refresh(); }
+    catch (err) { toast(err.message, true); }
+  };
+}
+
+renderTabs(); renderForm(); refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
