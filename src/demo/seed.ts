@@ -40,4 +40,11 @@ export async function seedDemo(deps: { ledger: LedgerService; registry: Registry
       idempotencyKey: 'seed-xfer',
     }),
   );
+
+  // Multi-currency examples so the panel shows wallets in every supported currency.
+  // (The ledger is multi-currency by design — these are example balances.)
+  await safe(ledger.fundWallet({ customerId: 'jean', currency: 'USD', amountMinor: toMinor('100.00', 'USD'), idempotencyKey: 'seed-usd' }));
+  await safe(ledger.fundWallet({ customerId: 'jean', currency: 'DOP', amountMinor: toMinor('500.00', 'DOP'), idempotencyKey: 'seed-dop' }));
+  await safe(ledger.fundWallet({ customerId: 'jean', currency: 'MXN', amountMinor: toMinor('300.00', 'MXN'), idempotencyKey: 'seed-mxn' }));
+  await safe(ledger.fundWallet({ customerId: 'jean', currency: 'USDT', amountMinor: toMinor('50.000000', 'USDT'), idempotencyKey: 'seed-usdt' }));
 }

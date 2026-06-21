@@ -10,6 +10,7 @@ export const CURRENCIES = {
   HTG: { scale: 2, symbol: 'G', kind: 'fiat' }, // Haitian gourde
   USD: { scale: 2, symbol: '$', kind: 'fiat' },
   DOP: { scale: 2, symbol: 'RD$', kind: 'fiat' }, // Dominican peso
+  MXN: { scale: 2, symbol: 'MX$', kind: 'fiat' }, // Mexican peso
   USDT: { scale: 6, symbol: '₮', kind: 'asset' }, // Tether (internal asset code)
 } as const;
 

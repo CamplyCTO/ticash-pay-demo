@@ -123,7 +123,7 @@
 <script>
 const API = ''; // same origin
 const $ = (id) => document.getElementById(id);
-const SCALE = { BRL:2, HTG:2, USD:2, DOP:2, USDT:6 };
+const SCALE = { BRL:2, HTG:2, USD:2, DOP:2, MXN:2, USDT:6 };
 function fmt(minor, ccy) {
   const s = SCALE[ccy] ?? 2; const neg = BigInt(minor) < 0n;
   const abs = (neg ? -BigInt(minor) : BigInt(minor)).toString().padStart(s+1,'0');

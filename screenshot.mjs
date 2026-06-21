@@ -2,7 +2,10 @@ import { chromium } from 'playwright';
 
 const url = process.env.URL || 'http://127.0.0.1:3100/admin';
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1320, height: 1500 } });
+const httpCredentials = process.env.BASIC_AUTH_USER
+  ? { username: process.env.BASIC_AUTH_USER, password: process.env.BASIC_AUTH_PASS || '' }
+  : undefined;
+const page = await browser.newPage({ viewport: { width: 1320, height: 1500 }, httpCredentials });
 
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
