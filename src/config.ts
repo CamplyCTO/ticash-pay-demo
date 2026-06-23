@@ -12,4 +12,15 @@ export const config = {
   /** Optional HTTP Basic auth over the whole API/panel (set both to enable). */
   basicAuthUser: process.env.BASIC_AUTH_USER ?? '',
   basicAuthPass: process.env.BASIC_AUTH_PASS ?? '',
+  /** Lytex money-in (PIX + card). Enabled only when a client id is present. */
+  lytex: {
+    enabled: !!process.env.LYTEX_CLIENT_ID,
+    mode: process.env.LYTEX_MODE ?? 'sandbox',
+    authBase: process.env.LYTEX_AUTH_BASE ?? 'https://sandbox-auth-pay.lytex.com.br',
+    apiBase: process.env.LYTEX_API_BASE ?? 'https://sandbox-api-pay.lytex.com.br',
+    clientId: process.env.LYTEX_CLIENT_ID ?? '',
+    clientSecret: process.env.LYTEX_CLIENT_SECRET ?? '',
+    callbackSecret: process.env.LYTEX_CALLBACK_SECRET ?? '',
+    webhookMode: (process.env.LYTEX_WEBHOOK_MODE ?? 'hmac') as 'hmac' | 'secret',
+  },
 } as const;

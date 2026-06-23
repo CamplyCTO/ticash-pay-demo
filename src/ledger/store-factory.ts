@@ -6,6 +6,13 @@ import { LedgerStore } from './store';
 import { InMemoryRegistryStore } from '../registry/in-memory-registry';
 import { PgRegistryStore } from '../registry/pg-registry';
 import { RegistryStore } from '../registry/store';
+import { InMemoryPaymentIntentStore, PaymentIntentStore } from '../payments/intent-store';
+import { PgPaymentIntentStore } from '../payments/pg-intent-store';
+import {
+  InMemoryProviderEventStore,
+  PgProviderEventStore,
+  ProviderEventStore,
+} from '../payments/event-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -13,4 +20,12 @@ export function createStore(): LedgerStore {
 
 export function createRegistry(): RegistryStore {
   return config.useInMemory ? new InMemoryRegistryStore() : new PgRegistryStore(getPool());
+}
+
+export function createPaymentIntentStore(): PaymentIntentStore {
+  return config.useInMemory ? new InMemoryPaymentIntentStore() : new PgPaymentIntentStore(getPool());
+}
+
+export function createProviderEventStore(): ProviderEventStore {
+  return config.useInMemory ? new InMemoryProviderEventStore() : new PgProviderEventStore(getPool());
 }

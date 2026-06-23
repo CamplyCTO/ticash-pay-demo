@@ -85,4 +85,99 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
 
   app.get('/balances', async () => ledger.listBalances());
   app.get('/reconciliation', async () => ledger.reconcile());
+
+  // ---- money-in (Lytex: PIX + card) ---------------------------------------
+  // Registered only when a payment gateway is configured (LYTEX_CLIENT_ID set).
+  if (deps.payments) {
+    const { gateway, intents, events } = deps.payments;
+
+    // Open a charge (PIX by default). On settlement, the webhook funds the wallet.
+    app.post('/payments/charge', async (req, reply) => {
+      const b = z
+        .object({
+          customerId: z.string().min(1),
+          amount: amountSchema,
+          methods: z.array(z.enum(['pix', 'creditCard', 'boleto'])).nonempty().optional(),
+          payer: z.object({
+            name: z.string().min(1),
+            cpfCnpj: z.string().min(11),
+            email: z.string().email().optional(),
+            cellphone: z.string().optional(),
+          }),
+          reference: z.string().min(1).optional(),
+          dueDate: z.string().optional(),
+        })
+        .parse(req.body);
+
+      const amountMinor = money(b.amount, 'BRL');
+      const reference = b.reference ?? `chg-${b.customerId}-${amountMinor}`;
+      const result = await gateway.createCharge({
+        customerId: b.customerId,
+        currency: 'BRL',
+        amountMinor,
+        methods: b.methods ?? ['pix'],
+        payer: b.payer,
+        reference,
+        ...(b.dueDate ? { dueDate: b.dueDate } : {}),
+      });
+      await intents.create({
+        providerId: result.providerId,
+        provider: gateway.name,
+        customerId: b.customerId,
+        currency: 'BRL',
+        amountMinor,
+        reference,
+      });
+      reply.status(201);
+      return { providerId: result.providerId, status: result.status, pix: result.pix };
+    });
+
+    app.get('/payments/intents', async () => intents.list());
+
+    // Provider settlement callback. Authenticated by the provider's signature
+    // (callback secret), NOT Basic Auth — see the onRequest hook in server.ts.
+    app.post('/webhooks/lytex', async (req, reply) => {
+      const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? '';
+      const event = gateway.parseWebhook(rawBody, req.headers as Record<string, string | undefined>);
+      if (!event) {
+        reply.status(401);
+        return { error: 'invalid signature' };
+      }
+      // Edge idempotency: a redelivered webhook is acknowledged without reprocessing.
+      const eventUid = `${event.event}:${event.providerId}`;
+      if (await events.seen(gateway.name, eventUid)) return { ok: true, duplicate: true };
+
+      let result: Record<string, unknown>;
+      if (!event.paid) {
+        result = { ok: true, ignored: event.event };
+      } else {
+        const intent = await intents.get(event.providerId);
+        if (!intent) {
+          // Acknowledge so the provider stops retrying; nothing maps to this charge.
+          req.log.warn({ providerId: event.providerId }, 'webhook for unknown charge');
+          result = { ok: true, unmatched: event.providerId };
+        } else {
+          if (event.amountMinor != null && event.amountMinor !== intent.amountMinor) {
+            req.log.warn(
+              { providerId: event.providerId, reported: String(event.amountMinor), expected: String(intent.amountMinor) },
+              'webhook amount mismatch; crediting recorded amount',
+            );
+          }
+          // Credit the RECORDED amount, idempotent by provider charge id.
+          const posted = await ledger.fundWallet({
+            customerId: intent.customerId,
+            currency: intent.currency,
+            amountMinor: intent.amountMinor,
+            idempotencyKey: `lytex:${event.providerId}`,
+            externalRef: event.providerId,
+          });
+          await intents.markPaid(event.providerId);
+          result = { ok: true, transactionUid: posted.transactionUid };
+        }
+      }
+      // Record only after successful handling, so a failed handler is retried.
+      await events.record(gateway.name, eventUid, event.event, event.raw);
+      return result;
+    });
+  }
 }

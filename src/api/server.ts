@@ -3,19 +3,41 @@ import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { config } from '../config';
-import { createRegistry, createStore } from '../ledger/store-factory';
+import {
+  createPaymentIntentStore,
+  createProviderEventStore,
+  createRegistry,
+  createStore,
+} from '../ledger/store-factory';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
 import { seedDemo } from '../demo/seed';
+import { LytexPaymentAdapter } from '../payments/lytex-adapter';
+import { PaymentIntentStore } from '../payments/intent-store';
+import { ProviderEventStore } from '../payments/event-store';
+import { PaymentInPort } from '../payments/types';
 import { registerRoutes } from './routes';
 
 export interface ServerDeps {
   ledger: LedgerService;
   registry: RegistryStore;
+  /** Money-in (Lytex) — present only when a gateway is configured. */
+  payments?: { gateway: PaymentInPort; intents: PaymentIntentStore; events: ProviderEventStore };
 }
 
 export function defaultDeps(): ServerDeps {
-  return { ledger: new LedgerService(createStore()), registry: createRegistry() };
+  const deps: ServerDeps = {
+    ledger: new LedgerService(createStore()),
+    registry: createRegistry(),
+  };
+  if (config.lytex.enabled) {
+    deps.payments = {
+      gateway: new LytexPaymentAdapter(config.lytex),
+      intents: createPaymentIntentStore(),
+      events: createProviderEventStore(),
+    };
+  }
+  return deps;
 }
 
 export function buildServer(deps: ServerDeps = defaultDeps()) {
@@ -26,7 +48,9 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   if (config.basicAuthUser) {
     const expected = `Basic ${Buffer.from(`${config.basicAuthUser}:${config.basicAuthPass}`).toString('base64')}`;
     app.addHook('onRequest', async (req, reply) => {
-      if (req.url === '/health') return;
+      // /health for platform probes; /webhooks/* are authenticated by the
+      // provider's own signature (callback secret), not Basic Auth.
+      if (req.url === '/health' || req.url.startsWith('/webhooks/')) return;
       const provided = req.headers.authorization ?? '';
       if (!constantTimeEqual(provided, expected)) {
         reply
@@ -57,6 +81,18 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   const adminHtml = loadAdminHtml();
   app.get('/admin', async (_req, reply) => {
     reply.header('content-type', 'text/html; charset=utf-8').send(adminHtml);
+  });
+
+  // Keep the raw JSON body on the request (webhook signatures are computed over
+  // the exact bytes). Behaviour is otherwise identical to Fastify's default parser.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    (req as unknown as { rawBody?: string }).rawBody = body as string;
+    try {
+      done(null, body ? JSON.parse(body as string) : {});
+    } catch (err) {
+      (err as { statusCode?: number }).statusCode = 400;
+      done(err as Error, undefined);
+    }
   });
 
   registerRoutes(app, deps);

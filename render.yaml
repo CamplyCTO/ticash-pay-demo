@@ -1,24 +1,50 @@
-# Render Blueprint — deploys the Phase 1 demo as a single stateless web service
-# (in-memory store, seeded on boot, Basic Auth). Free plan; sleeps when idle.
+# Render Blueprint — Ticash Pay
 #
-# If this repo's root is the PARENT of ticash-pay, uncomment `rootDir` below.
+# Phase 2 needs DURABLE state (PIX/MonCash webhooks arrive on separate requests and
+# must survive restarts), so this provisions a managed Postgres and runs the app on the
+# Postgres store (not the in-memory demo store).
+#
+# Migrations run on every boot via the docker command (idempotent: a schema_migrations
+# table skips already-applied files, and seedDemo dedupes on idempotency keys), so a
+# redeploy never doubles data and never starts against an unmigrated schema.
+#
+# Apply: Render dashboard -> New -> Blueprint -> pick this repo. Render creates the DB,
+# injects DATABASE_URL, then builds+starts the web service.
+#
+# Free-tier caveats: free Postgres is single-instance and expires ~30 days after creation
+# (fine for sandbox; move to a paid instance before real money). Free web service sleeps
+# when idle (cold start ~30-60s) — provider webhooks will wake it.
+
+databases:
+  - name: ticash-pay-db
+    plan: free
+    databaseName: ticash
+    user: ticash
+
 services:
   - type: web
     name: ticash-pay-demo
     runtime: docker
     plan: free
-    # rootDir: ticash-pay
+    # rootDir: ticash-pay   # uncomment if the repo root is the PARENT of ticash-pay
     dockerfilePath: ./Dockerfile
+    # Run migrations, then start. sh -c so the && chains inside the container.
+    dockerCommand: sh -c "node dist/db/migrate.js && node dist/api/server.js"
     healthCheckPath: /health
     autoDeploy: true
     envVars:
-      - key: STORE
-        value: memory
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ticash-pay-db
+          property: connectionString
       - key: SEED
-        value: "1"
+        value: "1"            # idempotent Jean->Marie demo seed; safe on every boot
       - key: HOST
         value: 0.0.0.0
       - key: BASIC_AUTH_USER
         value: ticash
       - key: BASIC_AUTH_PASS
-        sync: false   # set the value in the Render dashboard (kept out of git)
+        sync: false           # set the value in the Render dashboard (kept out of git)
+      # NOTE: no STORE=memory -> the app uses the Postgres store (src/config.ts).
+      # Phase 2 secrets (set in dashboard, never in git):
+      #   LYTEX_API_KEY, MONCASH_CLIENT_ID, MONCASH_CLIENT_SECRET, KYC_* , etc.
