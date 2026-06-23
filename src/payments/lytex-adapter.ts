@@ -145,7 +145,7 @@ export class LytexPaymentAdapter implements PaymentInPort {
     const event = String(body?.event ?? body?.type ?? data?.status ?? 'unknown');
     const status = String(data?.status ?? body?.status ?? '').toLowerCase();
     // Lytex "Liquidation" = settled. Match on event name or invoice status.
-    const paid = /liquidat|paid|settle|received|received/i.test(event) || status === 'liquidated' || status === 'paid';
+    const paid = /liquidat|paid|settle|received/i.test(event) || status === 'liquidated' || status === 'paid';
     const cents = data?.paidValue ?? data?.value ?? data?.amount;
     return {
       providerId: String(providerId),

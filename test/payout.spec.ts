@@ -68,15 +68,25 @@ describe('MonCashPayoutAdapter', () => {
     expect(JSON.parse(transfer.body!)).toMatchObject({ amount: 12180, receiver: '50912345678' }); // gourdes, not cents
   });
 
-  it('maps provider status to pending/success/failed', async () => {
-    const ok = new MonCashPayoutAdapter(mcCfg, new FakeHttp(handler), () => 1000);
-    expect((await ok.getStatus('mc-1')).state).toBe('success');
-    const failHttp = new FakeHttp((req: any) =>
-      req.url.endsWith('/Api/oauth/token')
-        ? { status: 200, body: JSON.stringify({ access_token: 'tok', expires_in: 59 }) }
-        : { status: 200, body: JSON.stringify({ payment: { message: 'transaction failed' } }) },
+  const statusAdapter = (message: string) =>
+    new MonCashPayoutAdapter(
+      mcCfg,
+      new FakeHttp((req: any) =>
+        req.url.endsWith('/Api/oauth/token')
+          ? { status: 200, body: JSON.stringify({ access_token: 'tok', expires_in: 59 }) }
+          : { status: 200, body: JSON.stringify({ payment: { message } }) },
+      ),
+      () => 1000,
     );
-    expect((await new MonCashPayoutAdapter(mcCfg, failHttp, () => 1000).getStatus('mc-1')).state).toBe('failed');
+
+  it('maps provider status to pending/success/failed', async () => {
+    expect((await statusAdapter('successful').getStatus('x')).state).toBe('success');
+    expect((await statusAdapter('transaction failed').getStatus('x')).state).toBe('failed');
+    // Regression: "transfer failed" must be FAILED, never success (failure checked first).
+    expect((await statusAdapter('transfer failed').getStatus('x')).state).toBe('failed');
+    // Ambiguous/unknown stays pending — never settle or reverse on uncertainty.
+    expect((await statusAdapter('in progress').getStatus('x')).state).toBe('pending');
+    expect((await statusAdapter('').getStatus('x')).state).toBe('pending');
   });
 });
 

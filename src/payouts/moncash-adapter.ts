@@ -101,8 +101,13 @@ export class MonCashPayoutAdapter implements PayoutPort {
     }
     const payment = body?.payment ?? body;
     const message = String(payment?.message ?? payment?.status ?? '').toLowerCase();
-    if (/success|complete|paid|transfer/i.test(message)) return { state: 'success', raw: body };
-    if (/fail|error|cancel|decline|reject/i.test(message)) return { state: 'failed', raw: body };
+    // Check FAILURE first: a message like "transfer failed" must never read as success.
+    // Anything not clearly success/failure stays `pending` so we keep polling (never
+    // settle or reverse on an ambiguous status).
+    if (/fail|error|cancel|declin|reject|refus|denied|insufficient/i.test(message)) {
+      return { state: 'failed', raw: body };
+    }
+    if (/success|completed|paid|effectu/i.test(message)) return { state: 'success', raw: body };
     return { state: 'pending', raw: body };
   }
 }
