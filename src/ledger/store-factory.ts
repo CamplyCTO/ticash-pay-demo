@@ -13,6 +13,8 @@ import {
   PgProviderEventStore,
   ProviderEventStore,
 } from '../payments/event-store';
+import { InMemoryPayoutStore, PayoutStore } from '../payouts/payout-store';
+import { PgPayoutStore } from '../payouts/pg-payout-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -28,4 +30,8 @@ export function createPaymentIntentStore(): PaymentIntentStore {
 
 export function createProviderEventStore(): ProviderEventStore {
   return config.useInMemory ? new InMemoryProviderEventStore() : new PgProviderEventStore(getPool());
+}
+
+export function createPayoutStore(): PayoutStore {
+  return config.useInMemory ? new InMemoryPayoutStore() : new PgPayoutStore(getPool());
 }

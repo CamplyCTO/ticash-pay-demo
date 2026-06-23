@@ -63,7 +63,17 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
 
   app.post('/transactions/transfer', async (req) => {
     const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string(), idempotencyKey: z.string().min(1) }).parse(req.body);
-    return ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
+    const result = await ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
+    // Record the outbound leg so the payout state machine can drive MonCash + reversal.
+    if (deps.payouts) {
+      await deps.payouts.service.createForTransfer({
+        correlationId: result.correlationId,
+        recipientRef: b.recipientRef,
+        quote: result.quote,
+        senderId: b.senderId,
+      });
+    }
+    return result;
   });
 
   app.post('/transactions/settle-payout', async (req) => {
@@ -178,6 +188,25 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       // Record only after successful handling, so a failed handler is retried.
       await events.record(gateway.name, eventUid, event.event, event.raw);
       return result;
+    });
+  }
+
+  // ---- money-out (MonCash payout state machine) ---------------------------
+  if (deps.payouts) {
+    const { service } = deps.payouts;
+
+    app.get('/payouts', async () => service.list());
+
+    // Send a created payout to the provider (created -> submitted).
+    app.post('/payouts/:correlationId/submit', async (req) => {
+      const p = z.object({ correlationId: z.string() }).parse(req.params);
+      return service.submit(p.correlationId);
+    });
+
+    // Poll the provider and advance: success -> settled, failure -> reversed.
+    app.post('/payouts/:correlationId/sync', async (req) => {
+      const p = z.object({ correlationId: z.string() }).parse(req.params);
+      return service.sync(p.correlationId);
     });
   }
 }

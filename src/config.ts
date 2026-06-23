@@ -23,4 +23,12 @@ export const config = {
     callbackSecret: process.env.LYTEX_CALLBACK_SECRET ?? '',
     webhookMode: (process.env.LYTEX_WEBHOOK_MODE ?? 'hmac') as 'hmac' | 'secret',
   },
+  /** MonCash payout (Haiti). Enabled only when a client id is present. */
+  moncash: {
+    enabled: !!process.env.MONCASH_CLIENT_ID,
+    mode: process.env.MONCASH_MODE ?? 'sandbox',
+    base: process.env.MONCASH_BASE ?? 'https://sandbox.moncashbutton.digicelgroup.com',
+    clientId: process.env.MONCASH_CLIENT_ID ?? '',
+    clientSecret: process.env.MONCASH_CLIENT_SECRET ?? '',
+  },
 } as const;

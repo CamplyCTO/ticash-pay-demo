@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import { config } from '../config';
 import {
   createPaymentIntentStore,
+  createPayoutStore,
   createProviderEventStore,
   createRegistry,
   createStore,
@@ -16,6 +17,8 @@ import { LytexPaymentAdapter } from '../payments/lytex-adapter';
 import { PaymentIntentStore } from '../payments/intent-store';
 import { ProviderEventStore } from '../payments/event-store';
 import { PaymentInPort } from '../payments/types';
+import { MonCashPayoutAdapter } from '../payouts/moncash-adapter';
+import { PayoutService } from '../payouts/payout-service';
 import { registerRoutes } from './routes';
 
 export interface ServerDeps {
@@ -23,19 +26,23 @@ export interface ServerDeps {
   registry: RegistryStore;
   /** Money-in (Lytex) — present only when a gateway is configured. */
   payments?: { gateway: PaymentInPort; intents: PaymentIntentStore; events: ProviderEventStore };
+  /** Money-out (MonCash) — present only when a payout rail is configured. */
+  payouts?: { service: PayoutService };
 }
 
 export function defaultDeps(): ServerDeps {
-  const deps: ServerDeps = {
-    ledger: new LedgerService(createStore()),
-    registry: createRegistry(),
-  };
+  const ledger = new LedgerService(createStore());
+  const deps: ServerDeps = { ledger, registry: createRegistry() };
   if (config.lytex.enabled) {
     deps.payments = {
       gateway: new LytexPaymentAdapter(config.lytex),
       intents: createPaymentIntentStore(),
       events: createProviderEventStore(),
     };
+  }
+  if (config.moncash.enabled) {
+    const port = new MonCashPayoutAdapter(config.moncash);
+    deps.payouts = { service: new PayoutService(port, createPayoutStore(), ledger) };
   }
   return deps;
 }

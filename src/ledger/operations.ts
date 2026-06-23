@@ -195,6 +195,53 @@ export function transfer(args: {
   return [debitJournal, fxJournal];
 }
 
+/**
+ * Reverse a cross-currency transfer when the outbound payout fails (before settle).
+ * Produces TWO journals that EXACTLY negate `transfer`'s journals, sharing the
+ * transfer's correlationId, returning the sender to whole:
+ *   R-FX (dest ccy):   debit payout_suspense (receive); credit fx_position (receive)
+ *   R-debit (src ccy): debit fx_position (send); debit fee_revenue (fee);
+ *                      credit sender wallet (send + fee)
+ * After reversal payout_suspense + fx_position net back to 0 and the sender is refunded.
+ */
+export function reverseTransfer(args: {
+  senderId: string;
+  quote: TransferQuote;
+  correlationId: string;
+  idempotencyKeyFx: string;
+  idempotencyKeyDebit: string;
+}): [JournalDraft, JournalDraft] {
+  const { quote } = args;
+  const from = quote.fromCurrency;
+  const to = quote.toCurrency;
+
+  const fxJournal: JournalDraft = {
+    type: 'reversal',
+    idempotencyKey: args.idempotencyKeyFx,
+    correlationId: args.correlationId,
+    postings: [
+      debit(systemAccount('payout_suspense', to), quote.receiveMinor),
+      credit(systemAccount('fx_position', to), quote.receiveMinor),
+    ],
+  };
+
+  const debitPostings: PostingDraft[] = [
+    debit(systemAccount('fx_position', from), quote.sendMinor),
+    credit(customerWallet(args.senderId, from), quote.totalDebitMinor),
+  ];
+  if (quote.feeMinor > 0n) {
+    debitPostings.splice(1, 0, debit(systemAccount('fee_revenue', from), quote.feeMinor));
+  }
+  const debitJournal: JournalDraft = {
+    type: 'reversal',
+    idempotencyKey: args.idempotencyKeyDebit,
+    correlationId: args.correlationId,
+    postings: debitPostings,
+  };
+
+  return [fxJournal, debitJournal];
+}
+
 /** Settle a confirmed outbound payout: funds leave the system to the recipient. */
 export function settlePayout(args: {
   currency: Currency;

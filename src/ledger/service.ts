@@ -95,6 +95,23 @@ export class LedgerService {
     return { correlationId, quote, debit, fx };
   }
 
+  /**
+   * Reverse a transfer when its payout fails (before settlement): posts the two
+   * reversal journals, returning the sender to whole. Idempotent per correlation.
+   */
+  async reverseTransfer(args: {
+    senderId: string;
+    quote: ops.TransferQuote;
+    correlationId: string;
+    idempotencyKeyFx: string;
+    idempotencyKeyDebit: string;
+  }): Promise<{ fx: PostedJournal; debit: PostedJournal }> {
+    const [fxDraft, debitDraft] = ops.reverseTransfer(args);
+    const fx = await this.store.post(fxDraft);
+    const debit = await this.store.post(debitDraft);
+    return { fx, debit };
+  }
+
   /** Settle a confirmed outbound payout (funds leave payout_suspense to recipient). */
   settlePayout(args: {
     currency: Currency;
