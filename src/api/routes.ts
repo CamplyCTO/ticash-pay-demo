@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { assertCurrency, Currency } from '../money/currency';
-import { toMinor } from '../money/money';
+import { convert, toMinor } from '../money/money';
 import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
 import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
@@ -93,15 +93,17 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   });
 
   app.post('/transactions/transfer', async (req) => {
-    const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string(), idempotencyKey: z.string().min(1) }).parse(req.body);
+    const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string().optional(), idempotencyKey: z.string().min(1) }).parse(req.body);
     await assertActiveCustomer(b.senderId);
-    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey };
+    // `rate` is optional: when omitted, the FX service prices + locks it (WS-6).
+    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
     // Crash-safe saga (persists intent, resumable, creates the payout). Falls back to a
     // direct ledger transfer when no saga is wired (e.g. lightweight test servers).
     if (deps.transfers) {
       return deps.transfers.service.initiate(transferArgs);
     }
-    const result = await ledger.initiateTransfer(transferArgs);
+    if (!b.rate) throw new RegistryError('rate is required (no FX service in this context)', 'VALIDATION');
+    const result = await ledger.initiateTransfer({ ...transferArgs, rate: b.rate });
     if (deps.payouts) {
       await deps.payouts.service.createForTransfer({ correlationId: result.correlationId, recipientRef: b.recipientRef, quote: result.quote, senderId: b.senderId });
     }
@@ -127,6 +129,26 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
 
   app.get('/balances', async () => ledger.listBalances());
   app.get('/reconciliation', async () => ledger.reconcile());
+
+  // ---- FX rates (mid + margin -> locked customer rate) --------------------
+  if (deps.fx) {
+    const fx = deps.fx.service;
+    // Price a pair (and optionally convert an amount) — what the app shows the customer.
+    app.get('/fx/quote', async (req) => {
+      const q = z.object({ from: currencySchema, to: currencySchema, amount: amountSchema.optional() }).parse(req.query);
+      const quote = await fx.quote(q.from, q.to);
+      if (q.amount === undefined) return quote;
+      const sendMinor = money(q.amount, q.from);
+      return { ...quote, sendMinor, receiveMinor: convert(sendMinor, q.from, q.to, quote.rate) };
+    });
+    app.get('/fx/rates', async () => fx.list());
+    // Admin: set/update a pair's mid rate + margin.
+    app.post('/fx/rates', async (req, reply) => {
+      const b = z.object({ from: currencySchema, to: currencySchema, midRate: z.string().min(1), marginBps: z.number().int().min(0).max(9999) }).parse(req.body);
+      reply.status(201);
+      return fx.setRate(b.from, b.to, b.midRate, b.marginBps);
+    });
+  }
 
   // ---- money-in (Lytex: PIX + card) ---------------------------------------
   // Registered only when a payment gateway is configured (LYTEX_CLIENT_ID set).

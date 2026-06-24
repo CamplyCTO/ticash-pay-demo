@@ -7,10 +7,14 @@ import {
   createPaymentIntentStore,
   createPayoutStore,
   createProviderEventStore,
+  createRateStore,
   createRegistry,
   createStore,
   createTransferStore,
 } from '../ledger/store-factory';
+import { RateService } from '../fx/rate-service';
+import { seedDefaultRates } from '../fx/rate-store';
+import { RateStore } from '../fx/types';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
 import { seedDemo } from '../demo/seed';
@@ -33,6 +37,8 @@ export interface ServerDeps {
   payouts?: { service: PayoutService };
   /** Crash-safe transfer saga. Always wired by defaultDeps; optional for tests. */
   transfers?: { service: TransferService };
+  /** FX rate service (mid + margin -> locked customer rate). Always wired by defaultDeps. */
+  fx?: { service: RateService; store: RateStore };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -54,8 +60,11 @@ export function defaultDeps(): ServerDeps {
       ? new MonCashPayoutAdapter(config.moncash)
       : undefined;
   deps.payouts = { service: new PayoutService(payoutPort, createPayoutStore(), ledger) };
+  const rateStore = createRateStore();
+  const rateService = new RateService(rateStore);
+  deps.fx = { service: rateService, store: rateStore };
   deps.transfers = {
-    service: new TransferService(ledger, createTransferStore(), deps.payouts.service),
+    service: new TransferService(ledger, createTransferStore(), deps.payouts.service, rateService),
   };
   return deps;
 }
@@ -154,6 +163,8 @@ if (require.main === module) {
       await seedDemo(deps);
       app.log.info('seeded demo data');
     }
+    // Seed default FX rates if absent (Postgres; in-memory self-seeds).
+    if (deps.fx) await seedDefaultRates(deps.fx.store, config.fx.defaultMarginBps);
     // Recovery sweep: resume any transfer left half-finished by a previous crash.
     if (deps.transfers) {
       const resumed = await deps.transfers.service.recover();

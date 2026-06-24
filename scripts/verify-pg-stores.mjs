@@ -7,6 +7,7 @@ import { PgPaymentIntentStore } from '../dist/payments/pg-intent-store.js';
 import { PgProviderEventStore } from '../dist/payments/event-store.js';
 import { PgPayoutStore } from '../dist/payouts/pg-payout-store.js';
 import { PgTransferStore } from '../dist/transfers/pg-transfer-store.js';
+import { PgRateStore } from '../dist/fx/pg-rate-store.js';
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -61,12 +62,22 @@ try {
   ok(!(await transfers.listIncomplete()).some((t) => t.correlationId === ID), 'completed transfer drops out of incomplete list');
   const tc = await transfers.create({ correlationId: ID, baseIdempotencyKey: 'x', senderId: 'x', recipientRef: 'x', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 1n, feeMinor: 0n, rate: '1', receiveMinor: 1n });
   ok(tc.status === 'completed', 'transfer create idempotent on correlation_id');
+
+  // --- fx rates ---
+  const rates = new PgRateStore(pool);
+  const f1 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.058', marginBps: 100, source: 'manual' });
+  ok(f1.midRate === '0.058' && f1.marginBps === 100 && f1.fromCurrency === 'MXN', 'fx rate set');
+  const f2 = await rates.get('MXN', 'USD');
+  ok(f2 && f2.toCurrency === 'USD', 'fx rate get (currencies trimmed)');
+  const f3 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.060', marginBps: 50, source: 'manual' });
+  ok(f3.midRate === '0.060' && f3.marginBps === 50, 'fx rate upsert on (from,to)');
 } finally {
   // cleanup test rows (these tables are separate from the ledger)
   await pool.query('DELETE FROM payment_intents WHERE provider_id = $1', [ID]);
   await pool.query('DELETE FROM provider_events WHERE event_uid = $1', ['ev-' + ID]);
   await pool.query('DELETE FROM payouts WHERE correlation_id = $1', [ID]);
   await pool.query('DELETE FROM transfers WHERE correlation_id = $1', [ID]);
+  await pool.query("DELETE FROM fx_rates WHERE from_currency = 'MXN ' AND to_currency = 'USD '");
   await pool.end();
 }
 console.log(failures === 0 ? '\nALL PG STORE CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

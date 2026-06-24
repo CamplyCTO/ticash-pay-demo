@@ -36,4 +36,8 @@ export const config = {
     base: process.env.NATCASH_BASE ?? 'https://reseller.test.bencashgroup.com/api/channel',
     privateKey: process.env.NATCASH_PRIVATE_KEY ?? '',
   },
+  /** FX: default platform margin (basis points) applied to mid rates. */
+  fx: {
+    defaultMarginBps: Number(process.env.FX_MARGIN_BPS ?? 200),
+  },
 } as const;

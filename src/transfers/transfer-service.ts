@@ -1,7 +1,9 @@
 import { Currency } from '../money/currency';
 import { TransferQuote, quoteTransfer } from '../ledger/operations';
+import { LedgerError } from '../ledger/engine';
 import { LedgerService, deriveUuid } from '../ledger/service';
 import { PayoutService } from '../payouts/payout-service';
+import { RateService } from '../fx/rate-service';
 import { NewTransfer, TransferRecord, TransferStore } from './transfer-store';
 
 /**
@@ -20,6 +22,7 @@ export class TransferService {
     private readonly ledger: LedgerService,
     private readonly store: TransferStore,
     private readonly payouts?: PayoutService,
+    private readonly rates?: RateService,
   ) {}
 
   async initiate(args: {
@@ -29,15 +32,17 @@ export class TransferService {
     toCurrency: Currency;
     sendMinor: bigint;
     feeMinor: bigint;
-    rate: string;
+    rate?: string; // optional: when omitted, the rate service prices + LOCKS the rate
     idempotencyKey: string;
   }): Promise<{ correlationId: string; quote: TransferQuote; status: TransferRecord['status'] }> {
+    // Lock the rate at quote time: caller-supplied rate, else priced by the FX service.
+    const rate = args.rate ?? (await this.priceRate(args.fromCurrency, args.toCurrency));
     const quote = quoteTransfer({
       fromCurrency: args.fromCurrency,
       toCurrency: args.toCurrency,
       sendMinor: args.sendMinor,
       feeMinor: args.feeMinor,
-      rate: args.rate,
+      rate,
     });
     const correlationId = deriveUuid(args.idempotencyKey);
     const intent: NewTransfer = {
@@ -49,7 +54,7 @@ export class TransferService {
       toCurrency: args.toCurrency,
       sendMinor: args.sendMinor,
       feeMinor: args.feeMinor,
-      rate: args.rate,
+      rate, // the LOCKED rate (caller-supplied or priced by the FX service)
       receiveMinor: quote.receiveMinor,
     };
     await this.store.create(intent); // idempotent on correlationId
@@ -117,6 +122,11 @@ export class TransferService {
 
   list(): Promise<TransferRecord[]> {
     return this.store.listIncomplete();
+  }
+
+  private async priceRate(from: Currency, to: Currency): Promise<string> {
+    if (!this.rates) throw new LedgerError('no rate provided and no FX rate service configured', 'VALIDATION');
+    return (await this.rates.quote(from, to)).rate;
   }
 }
 

@@ -17,6 +17,9 @@ import { InMemoryPayoutStore, PayoutStore } from '../payouts/payout-store';
 import { PgPayoutStore } from '../payouts/pg-payout-store';
 import { InMemoryTransferStore, TransferStore } from '../transfers/transfer-store';
 import { PgTransferStore } from '../transfers/pg-transfer-store';
+import { InMemoryRateStore } from '../fx/rate-store';
+import { PgRateStore } from '../fx/pg-rate-store';
+import { RateStore } from '../fx/types';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -40,4 +43,8 @@ export function createPayoutStore(): PayoutStore {
 
 export function createTransferStore(): TransferStore {
   return config.useInMemory ? new InMemoryTransferStore() : new PgTransferStore(getPool());
+}
+
+export function createRateStore(): RateStore {
+  return config.useInMemory ? new InMemoryRateStore(config.fx.defaultMarginBps) : new PgRateStore(getPool());
 }
