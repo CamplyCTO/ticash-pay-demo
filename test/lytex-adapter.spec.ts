@@ -9,7 +9,6 @@ const cfg: LytexConfig = {
   clientId: 'cid',
   clientSecret: 'csec',
   callbackSecret: 'sek',
-  webhookMode: 'hmac',
 };
 
 interface Recorded {
@@ -99,26 +98,32 @@ describe('LytexPaymentAdapter — auth + charge', () => {
 
 describe('LytexPaymentAdapter — webhook verification', () => {
   const adapter = new LytexPaymentAdapter(cfg, new FakeHttp(defaultHandler()), () => 1000);
-  const sign = (body: string) => createHmac('sha256', 'sek').update(body, 'utf8').digest('hex');
+  // Real Lytex shape: signature lives in the body = base64(HMAC-SHA256(secret, JSON.stringify(data))).
+  const lytexBody = (webhookType: string, data: object) => {
+    const signature = createHmac('sha256', 'sek').update(JSON.stringify(data), 'utf8').digest('base64');
+    return JSON.stringify({ webhookType, data, signature });
+  };
 
-  it('accepts a correctly-signed Liquidation and marks it paid', () => {
-    const body = JSON.stringify({ event: 'invoice.liquidated', data: { _id: 'inv1', status: 'liquidated', value: 10000 } });
-    const ev = adapter.parseWebhook(body, { 'x-lytex-signature': sign(body) });
+  it('accepts a correctly body-signed settlement and marks it paid', () => {
+    const body = lytexBody('receivedInvoice', { invoiceId: 'inv1', status: 'paid', invoiceValue: 10000 });
+    const ev = adapter.parseWebhook(body, {});
     expect(ev).not.toBeNull();
     expect(ev!.paid).toBe(true);
-    expect(ev!.providerId).toBe('inv1');
-    expect(ev!.amountMinor).toBe(10000n);
+    expect(ev!.providerId).toBe('inv1'); // from data.invoiceId
+    expect(ev!.amountMinor).toBe(10000n); // from data.invoiceValue (cents)
   });
 
-  it('rejects a bad signature (returns null)', () => {
-    const body = JSON.stringify({ event: 'invoice.liquidated', data: { _id: 'inv1' } });
-    expect(adapter.parseWebhook(body, { 'x-lytex-signature': 'deadbeef' })).toBeNull();
-    expect(adapter.parseWebhook(body, {})).toBeNull();
+  it('rejects a tampered body / bad signature (returns null)', () => {
+    const good = lytexBody('receivedInvoice', { invoiceId: 'inv1', status: 'paid', invoiceValue: 10000 });
+    const tampered = good.replace('"invoiceValue":10000', '"invoiceValue":999999'); // signature no longer matches
+    expect(adapter.parseWebhook(tampered, {})).toBeNull();
+    expect(adapter.parseWebhook('{"data":{"invoiceId":"x"},"signature":"nope"}', {})).toBeNull();
+    expect(adapter.parseWebhook('not json', {})).toBeNull();
   });
 
-  it('parses a non-settlement event as not-paid', () => {
-    const body = JSON.stringify({ event: 'invoice.created', data: { _id: 'inv1', status: 'created' } });
-    const ev = adapter.parseWebhook(body, { 'x-lytex-signature': sign(body) });
+  it('parses a due/creation event as not-paid', () => {
+    const body = lytexBody('dueInvoice', { invoiceId: 'inv1', status: 'waitingPayment', invoiceValue: 10000 });
+    const ev = adapter.parseWebhook(body, {});
     expect(ev!.paid).toBe(false);
   });
 });

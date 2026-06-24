@@ -27,15 +27,11 @@ export interface LytexConfig {
   apiBase: string; // https://sandbox-api-pay.lytex.com.br
   clientId: string;
   clientSecret: string;
-  callbackSecret: string;
-  /** How Lytex authenticates its webhooks. 'hmac' = HMAC-SHA256(body, secret); */
-  /** 'secret' = the callback secret is sent verbatim in a header. */
-  webhookMode: 'hmac' | 'secret';
+  callbackSecret: string; // validates webhooks (signature is in the body — see parseWebhook)
 }
 
 const TOKEN_SCOPES = ['client', 'invoice', 'paymentLink', 'product'];
 const TOKEN_SKEW_MS = 60_000; // refresh a minute early
-const SIG_HEADERS = ['x-lytex-signature', 'x-signature', 'signature', 'authorization'];
 
 export class LytexPaymentAdapter implements PaymentInPort {
   readonly name = 'lytex';
@@ -132,45 +128,58 @@ export class LytexPaymentAdapter implements PaymentInPort {
 
   // --- webhook --------------------------------------------------------------
 
-  parseWebhook(rawBody: string, headers: Record<string, string | undefined>): PaymentEvent | null {
-    if (!this.verifySignature(rawBody, headers)) return null;
+  /**
+   * Lytex posts the webhook signature INSIDE the JSON body (no header):
+   *   { webhookType, data: {...}, signature }
+   * where signature = base64( HMAC-SHA256( callbackSecret, JSON.stringify(data) ) ).
+   * (Verified by reverse-engineering two real sandbox deliveries.) The invoice id
+   * is `data.invoiceId`. Returns null on any verification/parse failure → caller 401s.
+   */
+  parseWebhook(rawBody: string, _headers: Record<string, string | undefined>): PaymentEvent | null {
     let body: any;
     try {
       body = JSON.parse(rawBody);
     } catch {
       return null;
     }
-    const data = body?.data ?? body;
-    const providerId = data?._id ?? data?.id ?? data?.invoice?._id;
+    const data = body?.data;
+    if (!data || typeof body?.signature !== 'string') return null;
+    if (!this.verifyBodySignature(rawBody, body)) return null;
+
+    const providerId = data.invoiceId ?? data._id ?? data.id;
     if (!providerId) return null;
-    const event = String(body?.event ?? body?.type ?? data?.status ?? 'unknown');
-    const status = String(data?.status ?? body?.status ?? '').toLowerCase();
-    // Lytex "Liquidation" = settled. Match on event name or invoice status.
-    const paid = /liquidat|paid|settle|received/i.test(event) || status === 'liquidated' || status === 'paid';
-    const cents = data?.paidValue ?? data?.value ?? data?.amount;
+    const webhookType = String(body.webhookType ?? '');
+    const status = String(data.status ?? '');
+    // Paid only on a clear settlement signal; "dueInvoice"/"waitingPayment" are NOT paid.
+    const paid = /paid|received|liquidat|settle|confirm/i.test(webhookType) || /paid|received|liquidat|settled|confirmed/i.test(status);
+    const cents = data.invoiceValue ?? data.paidValue ?? data.value;
     return {
       providerId: String(providerId),
       paid,
-      event,
+      event: webhookType || status || 'unknown',
       ...(cents != null ? { amountMinor: BigInt(Math.round(Number(cents))) } : {}),
       currency: 'BRL' as Currency,
       raw: body,
     };
   }
 
-  private verifySignature(rawBody: string, headers: Record<string, string | undefined>): boolean {
+  private verifyBodySignature(rawBody: string, body: any): boolean {
     const secret = this.cfg.callbackSecret;
     if (!secret) return false;
-    const provided = firstHeader(headers, SIG_HEADERS);
-    if (!provided) return false;
-    const candidate = provided.replace(/^Bearer\s+/i, '').trim();
-    if (this.cfg.webhookMode === 'secret') {
-      return constantTimeEqual(candidate, secret);
+    const sig: string = body.signature;
+    // Primary: HMAC over JSON.stringify(data) (re-stringify round-trips to Lytex's bytes).
+    const reStringified = createHmac('sha256', secret).update(JSON.stringify(body.data), 'utf8').digest('base64');
+    if (constantTimeEqual(sig, reStringified)) return true;
+    // Fallback: HMAC over the exact raw `data` substring Lytex sent (robust to any
+    // serialization quirk), assuming the conventional `...,"signature":...` tail.
+    const i = rawBody.indexOf('"data":');
+    const j = rawBody.indexOf(',"signature":');
+    if (i >= 0 && j > i) {
+      const rawData = rawBody.slice(i + 7, j);
+      const overRaw = createHmac('sha256', secret).update(rawData, 'utf8').digest('base64');
+      if (constantTimeEqual(sig, overRaw)) return true;
     }
-    // hmac: accept hex or base64 HMAC-SHA256 of the raw body.
-    const hex = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
-    const b64 = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
-    return constantTimeEqual(candidate, hex) || constantTimeEqual(candidate, b64);
+    return false;
   }
 }
 
@@ -206,16 +215,6 @@ function tokenExpiryMs(data: any, nowMs: number): number {
 
 function isoDate(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 10);
-}
-
-function firstHeader(
-  headers: Record<string, string | undefined>,
-  names: string[],
-): string | undefined {
-  const lower: Record<string, string> = {};
-  for (const [k, v] of Object.entries(headers)) if (v != null) lower[k.toLowerCase()] = v;
-  for (const n of names) if (lower[n]) return lower[n];
-  return undefined;
 }
 
 function constantTimeEqual(a: string, b: string): boolean {

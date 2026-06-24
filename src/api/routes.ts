@@ -148,11 +148,6 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     // (callback secret), NOT Basic Auth — see the onRequest hook in server.ts.
     app.post('/webhooks/lytex', async (req, reply) => {
       const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? '';
-      // TEMP diagnostic (LYTEX_WEBHOOK_DEBUG=1): learn the real signature header + body
-      // shape so we can verify it correctly, then turn off. Sandbox only.
-      if (process.env.LYTEX_WEBHOOK_DEBUG === '1') {
-        req.log.info({ headerNames: Object.keys(req.headers), bodySample: rawBody.slice(0, 600) }, 'lytex-webhook-debug');
-      }
       const event = gateway.parseWebhook(rawBody, req.headers as Record<string, string | undefined>);
       if (!event) {
         reply.status(401);

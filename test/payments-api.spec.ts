@@ -5,6 +5,7 @@ import { InMemoryRegistryStore } from '../src/registry/in-memory-registry';
 import { LedgerService } from '../src/ledger/service';
 import { InMemoryPaymentIntentStore } from '../src/payments/intent-store';
 import { InMemoryProviderEventStore } from '../src/payments/event-store';
+import { createHmac } from 'node:crypto';
 import { LytexPaymentAdapter, LytexConfig } from '../src/payments/lytex-adapter';
 import { HttpClient } from '../src/payments/types';
 
@@ -27,14 +28,12 @@ class FakeHttp implements HttpClient {
   }
 }
 
-// 'secret' mode: the webhook is authenticated by sending the callback secret in a header.
 const cfg: LytexConfig = {
   authBase: 'https://auth.test',
   apiBase: 'https://api.test',
   clientId: 'cid',
   clientSecret: 'csec',
   callbackSecret: 'cb-secret',
-  webhookMode: 'secret',
 };
 
 let app: ReturnType<typeof buildServer>;
@@ -56,13 +55,17 @@ function inject(opts: { method: 'GET' | 'POST'; url: string; payload?: unknown; 
 const balanceOf = async (id: string) =>
   (await inject({ method: 'GET', url: `/accounts/balance?ownerType=customer&ownerId=${id}&kind=wallet&currency=BRL` })).json().balanceMinor;
 
-const webhook = (bodyObj: object, secret: string) =>
-  inject({
+// Real Lytex webhook: { webhookType, data, signature } where
+// signature = base64(HMAC-SHA256(callbackSecret, JSON.stringify(data))).
+const webhook = (webhookType: string, data: object, secret = 'cb-secret') => {
+  const signature = createHmac('sha256', secret).update(JSON.stringify(data), 'utf8').digest('base64');
+  return inject({
     method: 'POST',
     url: '/webhooks/lytex',
-    payload: JSON.stringify(bodyObj),
-    headers: { 'content-type': 'application/json', 'x-lytex-signature': secret },
+    payload: JSON.stringify({ webhookType, data, signature }),
+    headers: { 'content-type': 'application/json' },
   });
+};
 
 describe('Lytex money-in over HTTP', () => {
   it('opens a charge and records a pending intent', async () => {
@@ -77,25 +80,25 @@ describe('Lytex money-in over HTTP', () => {
   });
 
   it('rejects a webhook with a bad signature', async () => {
-    const r = await webhook({ event: 'invoice.liquidated', data: { _id: 'inv1' } }, 'wrong');
+    const r = await webhook('receivedInvoice', { invoiceId: 'inv1', status: 'paid', invoiceValue: 10000 }, 'wrong-secret');
     expect(r.statusCode).toBe(401);
   });
 
-  it('funds the wallet on a verified Liquidation, exactly once', async () => {
+  it('funds the wallet on a verified settlement, exactly once', async () => {
     await inject({
       method: 'POST',
       url: '/payments/charge',
       payload: { customerId: 'jean', amount: '100.00', payer: { name: 'Jean', cpfCnpj: '12345678901' } },
     });
 
-    const body = { event: 'invoice.liquidated', data: { _id: 'inv1', status: 'liquidated', value: 10000 } };
-    const ok = await webhook(body, 'cb-secret');
+    const data = { invoiceId: 'inv1', status: 'paid', invoiceValue: 10000 };
+    const ok = await webhook('receivedInvoice', data);
     expect(ok.statusCode).toBe(200);
     expect(ok.json().ok).toBe(true);
     expect(await balanceOf('jean')).toBe('10000');
 
     // Duplicate delivery is deduped at the edge (provider_events) and never re-credits.
-    const dup = await webhook(body, 'cb-secret');
+    const dup = await webhook('receivedInvoice', data);
     expect(dup.statusCode).toBe(200);
     expect(dup.json().duplicate).toBe(true);
     expect(await balanceOf('jean')).toBe('10000');
@@ -105,7 +108,7 @@ describe('Lytex money-in over HTTP', () => {
   });
 
   it('acknowledges a settlement for an unknown charge without funding', async () => {
-    const r = await webhook({ event: 'invoice.liquidated', data: { _id: 'ghost', status: 'liquidated' } }, 'cb-secret');
+    const r = await webhook('receivedInvoice', { invoiceId: 'ghost', status: 'paid', invoiceValue: 10000 });
     expect(r.statusCode).toBe(200);
     expect(r.json().unmatched).toBe('ghost');
   });
