@@ -29,6 +29,17 @@ class FakePort implements PayoutPort {
   async getStatus() { return { state: 'pending' as const, raw: {} }; }
 }
 
+describe('deriveUuid (correlation id)', () => {
+  it('is deterministic, distinct per seed, and UUID-shaped', () => {
+    expect(deriveUuid('xfer-1')).toBe(deriveUuid('xfer-1')); // stable for retries
+    expect(deriveUuid('xfer-1')).not.toBe(deriveUuid('xfer-2'));
+    expect(deriveUuid('a')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    // No collisions across many distinct seeds (SHA-256 backed).
+    const ids = new Set(Array.from({ length: 5000 }, (_, i) => deriveUuid(`k-${i}`)));
+    expect(ids.size).toBe(5000);
+  });
+});
+
 describe('TransferService saga', () => {
   it('completes a transfer end-to-end and stays balanced', async () => {
     const ledger = await fundedLedger();
@@ -88,6 +99,23 @@ describe('TransferService saga', () => {
     // Running again is a no-op.
     await svc.run(correlationId);
     expect(await ledger.getBalance(sys('payout_suspense', 'HTG'))).toBe(1218000n);
+  });
+
+  it('recover() isolates a failing transfer and still completes the others', async () => {
+    const ledger = await fundedLedger(); // funds 'jean' only
+    const store = new InMemoryTransferStore();
+    const svc = new TransferService(ledger, store);
+    const good = deriveUuid('good');
+    const bad = deriveUuid('bad');
+    const base = { recipientRef: '50912345678', fromCurrency: 'BRL' as const, toCurrency: 'HTG' as const, sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n };
+    await store.create({ correlationId: good, baseIdempotencyKey: 'good', senderId: 'jean', ...base });
+    await store.create({ correlationId: bad, baseIdempotencyKey: 'bad', senderId: 'broke', ...base }); // no funds -> debit throws
+
+    const resumed = await svc.recover(); // must not throw
+    expect(resumed).toBe(1);
+    expect((await store.get(good))!.status).toBe('completed');
+    expect((await store.get(bad))!.status).toBe('pending'); // left for next sweep
+    expect((await ledger.reconcile()).balanced).toBe(true);
   });
 
   it('recover() drives every incomplete transfer to completion', async () => {

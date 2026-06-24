@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { Currency } from '../money/currency';
 import * as ops from './operations';
 import { BalanceRow, FeedFilter, FeedRow, LedgerStore, ReconResult } from './store';
@@ -158,17 +158,14 @@ export class LedgerService {
   }
 }
 
-/** Deterministic UUIDv4-shaped id derived from a string (stable per idempotency key). */
+/**
+ * Deterministic, collision-resistant UUIDv4-shaped id derived from a string
+ * (stable per idempotency key). Uses SHA-256 so distinct keys cannot collide into
+ * the same correlationId — a collision would let the `transfers`/`payouts` unique
+ * constraint mis-treat one transfer as a replay of another. Money must not collide.
+ */
 export function deriveUuid(seed: string): string {
-  // Not cryptographic; just a stable correlation id when the caller has none.
   if (seed.length === 0) return randomUUID();
-  let h = 0x811c9dc5;
-  const hex: string[] = [];
-  for (let i = 0; i < 32; i++) {
-    h ^= seed.charCodeAt(i % seed.length) + i * 131;
-    h = Math.imul(h, 0x01000193) >>> 0;
-    hex.push((h & 0xf).toString(16));
-  }
-  const s = hex.join('');
-  return `${s.slice(0, 8)}-${s.slice(8, 12)}-4${s.slice(13, 16)}-8${s.slice(17, 20)}-${s.slice(20, 32)}`;
+  const h = createHash('sha256').update(seed).digest('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }

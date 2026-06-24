@@ -96,11 +96,23 @@ export class TransferService {
     return t;
   }
 
-  /** Boot recovery: drive every half-finished transfer to completion. Returns count. */
+  /**
+   * Boot recovery: drive every half-finished transfer to completion. A failure on
+   * one transfer is isolated (logged-by-caller via the count) and left for the next
+   * sweep — it must never block the others or server startup. Returns # resumed.
+   */
   async recover(): Promise<number> {
     const stuck = await this.store.listIncomplete();
-    for (const t of stuck) await this.run(t.correlationId);
-    return stuck.length;
+    let resumed = 0;
+    for (const t of stuck) {
+      try {
+        await this.run(t.correlationId);
+        resumed++;
+      } catch {
+        // Leave this one for the next sweep; don't abort the batch or startup.
+      }
+    }
+    return resumed;
   }
 
   list(): Promise<TransferRecord[]> {
