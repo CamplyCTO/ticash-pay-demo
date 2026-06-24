@@ -6,6 +6,7 @@ import pg from 'pg';
 import { PgPaymentIntentStore } from '../dist/payments/pg-intent-store.js';
 import { PgProviderEventStore } from '../dist/payments/event-store.js';
 import { PgPayoutStore } from '../dist/payouts/pg-payout-store.js';
+import { PgTransferStore } from '../dist/transfers/pg-transfer-store.js';
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -48,11 +49,24 @@ try {
   ok((await payouts.get(ID)).status === 'settled', 'payout update -> settled');
   const pc = await payouts.create({ correlationId: ID, provider: 'moncash', recipientRef: 'x', currency: 'HTG', amountMinor: 1n, reversal });
   ok(pc.status === 'settled', 'payout create idempotent on correlation_id');
+
+  // --- transfers (saga log) ---
+  const transfers = new PgTransferStore(pool);
+  const t1 = await transfers.create({ correlationId: ID, baseIdempotencyKey: 'base-' + ID, senderId: 'jean', recipientRef: '50912345678', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n });
+  ok(t1.status === 'pending' && t1.sendMinor === 50000n && t1.receiveMinor === 1218000n, 'transfer created pending, bigints round-trip');
+  ok(t1.fromCurrency === 'BRL' && t1.toCurrency === 'HTG', 'transfer currencies trimmed');
+  await transfers.setStatus(ID, 'debited');
+  ok((await transfers.listIncomplete()).some((t) => t.correlationId === ID), 'incomplete list includes debited transfer');
+  await transfers.setStatus(ID, 'completed');
+  ok(!(await transfers.listIncomplete()).some((t) => t.correlationId === ID), 'completed transfer drops out of incomplete list');
+  const tc = await transfers.create({ correlationId: ID, baseIdempotencyKey: 'x', senderId: 'x', recipientRef: 'x', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 1n, feeMinor: 0n, rate: '1', receiveMinor: 1n });
+  ok(tc.status === 'completed', 'transfer create idempotent on correlation_id');
 } finally {
   // cleanup test rows (these tables are separate from the ledger)
   await pool.query('DELETE FROM payment_intents WHERE provider_id = $1', [ID]);
   await pool.query('DELETE FROM provider_events WHERE event_uid = $1', ['ev-' + ID]);
   await pool.query('DELETE FROM payouts WHERE correlation_id = $1', [ID]);
+  await pool.query('DELETE FROM transfers WHERE correlation_id = $1', [ID]);
   await pool.end();
 }
 console.log(failures === 0 ? '\nALL PG STORE CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

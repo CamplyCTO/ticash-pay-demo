@@ -9,6 +9,7 @@ import {
   createProviderEventStore,
   createRegistry,
   createStore,
+  createTransferStore,
 } from '../ledger/store-factory';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
@@ -19,6 +20,7 @@ import { ProviderEventStore } from '../payments/event-store';
 import { PaymentInPort } from '../payments/types';
 import { MonCashPayoutAdapter } from '../payouts/moncash-adapter';
 import { PayoutService } from '../payouts/payout-service';
+import { TransferService } from '../transfers/transfer-service';
 import { registerRoutes } from './routes';
 
 export interface ServerDeps {
@@ -28,6 +30,8 @@ export interface ServerDeps {
   payments?: { gateway: PaymentInPort; intents: PaymentIntentStore; events: ProviderEventStore };
   /** Money-out (MonCash) — present only when a payout rail is configured. */
   payouts?: { service: PayoutService };
+  /** Crash-safe transfer saga. Always wired by defaultDeps; optional for tests. */
+  transfers?: { service: TransferService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -44,6 +48,9 @@ export function defaultDeps(): ServerDeps {
     const port = new MonCashPayoutAdapter(config.moncash);
     deps.payouts = { service: new PayoutService(port, createPayoutStore(), ledger) };
   }
+  deps.transfers = {
+    service: new TransferService(ledger, createTransferStore(), deps.payouts?.service),
+  };
   return deps;
 }
 
@@ -139,6 +146,11 @@ if (require.main === module) {
     if (config.seed) {
       await seedDemo(deps);
       app.log.info('seeded demo data');
+    }
+    // Recovery sweep: resume any transfer left half-finished by a previous crash.
+    if (deps.transfers) {
+      const resumed = await deps.transfers.service.recover();
+      if (resumed > 0) app.log.warn(`recovered ${resumed} incomplete transfer(s)`);
     }
     const addr = await app.listen({ port: config.port, host: config.host });
     app.log.info(`Ticash Pay ledger API on ${addr} · admin at ${addr}/admin`);

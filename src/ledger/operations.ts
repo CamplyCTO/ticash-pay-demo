@@ -153,6 +153,60 @@ export function quoteTransfer(args: {
  *                    credit payout_suspense (receive)     -> nets 0
  * The payout is later settled (payout_suspense -> settlement) by `settlePayout`.
  */
+/** J1 (source ccy): debit sender (send+fee); credit fee_revenue (fee); credit fx_position (send). */
+export function transferDebitJournal(args: {
+  senderId: string;
+  quote: TransferQuote;
+  correlationId: string;
+  idempotencyKey: string;
+  recipientRef: string;
+}): JournalDraft {
+  const { quote } = args;
+  const from = quote.fromCurrency;
+  const postings: PostingDraft[] = [
+    debit(customerWallet(args.senderId, from), quote.totalDebitMinor),
+    credit(systemAccount('fx_position', from), quote.sendMinor),
+  ];
+  // Only book a fee posting when there actually is a fee (no zero-amount postings).
+  if (quote.feeMinor > 0n) {
+    postings.splice(1, 0, credit(systemAccount('fee_revenue', from), quote.feeMinor));
+  }
+  return {
+    type: 'transfer',
+    idempotencyKey: args.idempotencyKey,
+    correlationId: args.correlationId,
+    metadata: { recipientRef: args.recipientRef, rate: quote.rate },
+    postings,
+  };
+}
+
+/** J2 (dest ccy): debit fx_position (receive); credit payout_suspense (receive). */
+export function transferFxJournal(args: {
+  quote: TransferQuote;
+  correlationId: string;
+  idempotencyKey: string;
+  recipientRef: string;
+}): JournalDraft {
+  const { quote } = args;
+  const to = quote.toCurrency;
+  return {
+    type: 'transfer',
+    idempotencyKey: args.idempotencyKey,
+    correlationId: args.correlationId,
+    metadata: { recipientRef: args.recipientRef, rate: quote.rate },
+    postings: [
+      debit(systemAccount('fx_position', to), quote.receiveMinor),
+      credit(systemAccount('payout_suspense', to), quote.receiveMinor),
+    ],
+  };
+}
+
+/**
+ * Cross-currency transfer (e.g. BRL -> HTG). Produces TWO balanced journals
+ * sharing a correlationId (see the per-leg builders above). The payout is later
+ * settled (payout_suspense -> settlement) by `settlePayout`, or unwound by
+ * `reverseTransfer` if it fails.
+ */
 export function transfer(args: {
   senderId: string;
   quote: TransferQuote;
@@ -161,38 +215,21 @@ export function transfer(args: {
   idempotencyKeyFx: string;
   recipientRef: string; // e.g. MonCash msisdn / name
 }): [JournalDraft, JournalDraft] {
-  const { quote } = args;
-  const from = quote.fromCurrency;
-  const to = quote.toCurrency;
-
-  const debitPostings: PostingDraft[] = [
-    debit(customerWallet(args.senderId, from), quote.totalDebitMinor),
-    credit(systemAccount('fx_position', from), quote.sendMinor),
+  return [
+    transferDebitJournal({
+      senderId: args.senderId,
+      quote: args.quote,
+      correlationId: args.correlationId,
+      idempotencyKey: args.idempotencyKeyDebit,
+      recipientRef: args.recipientRef,
+    }),
+    transferFxJournal({
+      quote: args.quote,
+      correlationId: args.correlationId,
+      idempotencyKey: args.idempotencyKeyFx,
+      recipientRef: args.recipientRef,
+    }),
   ];
-  // Only book a fee posting when there actually is a fee (no zero-amount postings).
-  if (quote.feeMinor > 0n) {
-    debitPostings.splice(1, 0, credit(systemAccount('fee_revenue', from), quote.feeMinor));
-  }
-  const debitJournal: JournalDraft = {
-    type: 'transfer',
-    idempotencyKey: args.idempotencyKeyDebit,
-    correlationId: args.correlationId,
-    metadata: { recipientRef: args.recipientRef, rate: quote.rate },
-    postings: debitPostings,
-  };
-
-  const fxJournal: JournalDraft = {
-    type: 'transfer',
-    idempotencyKey: args.idempotencyKeyFx,
-    correlationId: args.correlationId,
-    metadata: { recipientRef: args.recipientRef, rate: quote.rate },
-    postings: [
-      debit(systemAccount('fx_position', to), quote.receiveMinor),
-      credit(systemAccount('payout_suspense', to), quote.receiveMinor),
-    ],
-  };
-
-  return [debitJournal, fxJournal];
 }
 
 /**

@@ -53,6 +53,27 @@ export class LedgerService {
 
   quoteTransfer = ops.quoteTransfer;
 
+  /** Post the source-currency debit leg of a transfer (idempotent by key). Saga step. */
+  postTransferDebit(args: {
+    senderId: string;
+    quote: ops.TransferQuote;
+    correlationId: string;
+    recipientRef: string;
+    idempotencyKey: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.transferDebitJournal(args));
+  }
+
+  /** Post the destination-currency FX leg of a transfer (idempotent by key). Saga step. */
+  postTransferFx(args: {
+    quote: ops.TransferQuote;
+    correlationId: string;
+    recipientRef: string;
+    idempotencyKey: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.transferFxJournal(args));
+  }
+
   /**
    * Initiate a cross-currency transfer. Posts the source-currency debit journal
    * and the FX journal (funds parked in payout_suspense), sharing a correlationId.
@@ -138,7 +159,7 @@ export class LedgerService {
 }
 
 /** Deterministic UUIDv4-shaped id derived from a string (stable per idempotency key). */
-function deriveUuid(seed: string): string {
+export function deriveUuid(seed: string): string {
   // Not cryptographic; just a stable correlation id when the caller has none.
   if (seed.length === 0) return randomUUID();
   let h = 0x811c9dc5;

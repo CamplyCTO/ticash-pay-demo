@@ -15,6 +15,8 @@ import {
 } from '../payments/event-store';
 import { InMemoryPayoutStore, PayoutStore } from '../payouts/payout-store';
 import { PgPayoutStore } from '../payouts/pg-payout-store';
+import { InMemoryTransferStore, TransferStore } from '../transfers/transfer-store';
+import { PgTransferStore } from '../transfers/pg-transfer-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -34,4 +36,8 @@ export function createProviderEventStore(): ProviderEventStore {
 
 export function createPayoutStore(): PayoutStore {
   return config.useInMemory ? new InMemoryPayoutStore() : new PgPayoutStore(getPool());
+}
+
+export function createTransferStore(): TransferStore {
+  return config.useInMemory ? new InMemoryTransferStore() : new PgTransferStore(getPool());
 }

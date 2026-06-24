@@ -63,15 +63,15 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
 
   app.post('/transactions/transfer', async (req) => {
     const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string(), idempotencyKey: z.string().min(1) }).parse(req.body);
-    const result = await ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
-    // Record the outbound leg so the payout state machine can drive MonCash + reversal.
+    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey };
+    // Crash-safe saga (persists intent, resumable, creates the payout). Falls back to a
+    // direct ledger transfer when no saga is wired (e.g. lightweight test servers).
+    if (deps.transfers) {
+      return deps.transfers.service.initiate(transferArgs);
+    }
+    const result = await ledger.initiateTransfer(transferArgs);
     if (deps.payouts) {
-      await deps.payouts.service.createForTransfer({
-        correlationId: result.correlationId,
-        recipientRef: b.recipientRef,
-        quote: result.quote,
-        senderId: b.senderId,
-      });
+      await deps.payouts.service.createForTransfer({ correlationId: result.correlationId, recipientRef: b.recipientRef, quote: result.quote, senderId: b.senderId });
     }
     return result;
   });
