@@ -47,7 +47,7 @@ function defaultHandler(authCounter?: { n: number }) {
       return {
         status: 200,
         body: JSON.stringify({
-          data: { _id: 'inv1', _hashId: 'h1', status: 'created', paymentMethods: { pix: { qrCode: 'PIXCOPY', qrCodeImage: 'IMG' } } },
+          data: { _id: 'inv1', _hashId: 'h1', status: 'waitingPayment', paymentMethods: { pix: { qrcode: 'PIXCOPY' } } },
         }),
       };
     }

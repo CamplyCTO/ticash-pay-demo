@@ -122,7 +122,8 @@ export class LytexPaymentAdapter implements PaymentInPort {
       hashId: data?._hashId ?? data?.hashId,
       status: data?.status ?? 'created',
       pix: {
-        copyPaste: pix.qrCode ?? pix.copyPaste ?? pix.emv,
+        // Lytex returns the PIX copy-and-paste (EMV) string as `qrcode` (lowercase c).
+        copyPaste: pix.qrcode ?? pix.qrCode ?? pix.copyPaste ?? pix.emv,
         qrCodeImage: pix.qrCodeImage ?? pix.image,
       },
       raw: body,
