@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { assertCurrency, Currency } from '../money/currency';
 import { toMinor } from '../money/money';
 import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
+import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
 
 const currencySchema = z.string().transform((v) => assertCurrency(v));
@@ -15,6 +16,17 @@ function money(amount: string | number, currency: Currency): bigint {
 
 export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   const { ledger, registry } = deps;
+
+  // A blocked party is rejected by money operations (only if it's a known party;
+  // unregistered ids are allowed, matching prior behaviour).
+  const assertActiveCustomer = async (id: string) => {
+    const c = await registry.getCustomer(id);
+    if (c && c.status === 'blocked') throw new RegistryError(`customer ${id} is blocked`, 'FORBIDDEN');
+  };
+  const assertActiveAgent = async (id: string) => {
+    const a = await registry.getAgent(id);
+    if (a && a.status === 'blocked') throw new RegistryError(`agent ${id} is blocked`, 'FORBIDDEN');
+  };
 
   // ---- party registry ------------------------------------------------------
   app.post('/customers', async (req, reply) => {
@@ -40,29 +52,49 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   });
   app.get('/agents', async () => registry.listAgents());
 
+  // Block / re-activate parties (admin). A blocked agent/customer cannot transact.
+  const statusBody = z.object({ status: z.enum(['active', 'blocked']) });
+  app.post('/agents/:externalId/status', async (req) => {
+    const p = z.object({ externalId: z.string() }).parse(req.params);
+    const b = statusBody.parse(req.body);
+    return registry.setAgentStatus(p.externalId, b.status);
+  });
+  app.post('/customers/:externalId/status', async (req) => {
+    const p = z.object({ externalId: z.string() }).parse(req.params);
+    const b = statusBody.parse(req.body);
+    return registry.setCustomerStatus(p.externalId, b.status);
+  });
+
   // ---- money operations ----------------------------------------------------
   app.post('/transactions/fund-wallet', async (req) => {
     const b = z.object({ customerId: z.string(), currency: currencySchema, amount: amountSchema, idempotencyKey: z.string().min(1), externalRef: z.string().optional() }).parse(req.body);
+    await assertActiveCustomer(b.customerId);
     return ledger.fundWallet({ customerId: b.customerId, currency: b.currency, amountMinor: money(b.amount, b.currency), idempotencyKey: b.idempotencyKey, ...(b.externalRef ? { externalRef: b.externalRef } : {}) });
   });
 
   app.post('/transactions/cash-in', async (req) => {
     const b = z.object({ agentId: z.string(), customerId: z.string(), currency: currencySchema, amount: amountSchema, idempotencyKey: z.string().min(1) }).parse(req.body);
+    await assertActiveAgent(b.agentId);
+    await assertActiveCustomer(b.customerId);
     return ledger.cashIn({ agentId: b.agentId, customerId: b.customerId, currency: b.currency, amountMinor: money(b.amount, b.currency), idempotencyKey: b.idempotencyKey });
   });
 
   app.post('/transactions/cash-out', async (req) => {
     const b = z.object({ agentId: z.string(), customerId: z.string(), currency: currencySchema, amount: amountSchema, idempotencyKey: z.string().min(1) }).parse(req.body);
+    await assertActiveAgent(b.agentId);
+    await assertActiveCustomer(b.customerId);
     return ledger.cashOut({ agentId: b.agentId, customerId: b.customerId, currency: b.currency, amountMinor: money(b.amount, b.currency), idempotencyKey: b.idempotencyKey });
   });
 
   app.post('/agents/float-topup', async (req) => {
     const b = z.object({ agentId: z.string(), currency: currencySchema, amount: amountSchema, idempotencyKey: z.string().min(1), externalRef: z.string().optional() }).parse(req.body);
+    await assertActiveAgent(b.agentId);
     return ledger.floatTopup({ agentId: b.agentId, currency: b.currency, amountMinor: money(b.amount, b.currency), idempotencyKey: b.idempotencyKey, ...(b.externalRef ? { externalRef: b.externalRef } : {}) });
   });
 
   app.post('/transactions/transfer', async (req) => {
     const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string(), idempotencyKey: z.string().min(1) }).parse(req.body);
+    await assertActiveCustomer(b.senderId);
     const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey };
     // Crash-safe saga (persists intent, resumable, creates the payout). Falls back to a
     // direct ledger transfer when no saga is wired (e.g. lightweight test servers).
@@ -119,6 +151,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         })
         .parse(req.body);
 
+      await assertActiveCustomer(b.customerId);
       const amountMinor = money(b.amount, 'BRL');
       const reference = b.reference ?? `chg-${b.customerId}-${amountMinor}`;
       const result = await gateway.createCharge({
@@ -207,6 +240,19 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     app.post('/payouts/:correlationId/sync', async (req) => {
       const p = z.object({ correlationId: z.string() }).parse(req.params);
       return service.sync(p.correlationId);
+    });
+
+    // MANUAL release (operator paid out by hand) -> settles the ledger.
+    app.post('/payouts/:correlationId/release', async (req) => {
+      const p = z.object({ correlationId: z.string() }).parse(req.params);
+      const b = z.object({ providerRef: z.string().optional() }).parse(req.body ?? {});
+      return service.releaseManually(p.correlationId, b.providerRef);
+    });
+
+    // MANUAL fail (out-of-band payout failed) -> reverses, refunding the sender.
+    app.post('/payouts/:correlationId/fail', async (req) => {
+      const p = z.object({ correlationId: z.string() }).parse(req.params);
+      return service.failManually(p.correlationId);
     });
   }
 }

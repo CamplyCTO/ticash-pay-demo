@@ -1,5 +1,5 @@
 import { RegistryError, RegistryStore } from './store';
-import { Agent, CreateAgentInput, CreateCustomerInput, Customer, KycStatus } from './types';
+import { Agent, CreateAgentInput, CreateCustomerInput, Customer, KycStatus, PartyStatus } from './types';
 
 export class InMemoryRegistryStore implements RegistryStore {
   private readonly customers = new Map<string, Customer>();
@@ -39,6 +39,14 @@ export class InMemoryRegistryStore implements RegistryStore {
     return updated;
   }
 
+  async setCustomerStatus(externalId: string, status: PartyStatus): Promise<Customer> {
+    const c = this.customers.get(externalId);
+    if (!c) throw new RegistryError(`customer ${externalId} not found`, 'NOT_FOUND');
+    const updated: Customer = { ...c, status };
+    this.customers.set(externalId, updated);
+    return updated;
+  }
+
   async createAgent(input: CreateAgentInput): Promise<Agent> {
     if (this.agents.has(input.externalId)) {
       throw new RegistryError(`agent ${input.externalId} already exists`, 'CONFLICT');
@@ -56,6 +64,14 @@ export class InMemoryRegistryStore implements RegistryStore {
 
   async getAgent(externalId: string): Promise<Agent | null> {
     return this.agents.get(externalId) ?? null;
+  }
+
+  async setAgentStatus(externalId: string, status: PartyStatus): Promise<Agent> {
+    const a = this.agents.get(externalId);
+    if (!a) throw new RegistryError(`agent ${externalId} not found`, 'NOT_FOUND');
+    const updated: Agent = { ...a, status };
+    this.agents.set(externalId, updated);
+    return updated;
   }
 
   async listAgents(): Promise<Agent[]> {

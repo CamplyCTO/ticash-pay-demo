@@ -111,7 +111,15 @@
         <h2>👤 Clientes &amp; agentes · KYC</h2>
         <div class="body" style="max-height:260px; overflow:auto">
           <table><thead><tr><th>Cliente</th><th>KYC</th><th>Status</th></tr></thead><tbody id="customers"></tbody></table>
-          <table style="margin-top:10px"><thead><tr><th>Agente</th><th class="num">Limite float</th><th class="num">Comissão</th></tr></thead><tbody id="agents"></tbody></table>
+          <table style="margin-top:10px"><thead><tr><th>Agente</th><th class="num">Limite float</th><th class="num">Comissão</th><th>Status</th></tr></thead><tbody id="agents"></tbody></table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>💸 Pagamentos Haiti (payouts)</h2>
+        <div class="body" style="max-height:260px; overflow:auto">
+          <table><thead><tr><th>correlationId</th><th>destinatário</th><th class="num">valor</th><th>status</th></tr></thead><tbody id="payouts"></tbody></table>
+          <div class="muted" style="margin-top:8px">Pague no Haiti (Natcash/MonCash) e use <b>Liberar pagamento (manual)</b> nas Operações com o correlationId pra dar baixa.</div>
         </div>
       </div>
     </div>
@@ -179,7 +187,18 @@ async function refresh() {
       <td class="muted">${c.status}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">nenhum cliente</td></tr>';
     $('agents').innerHTML = agents.map(a => `<tr><td>${a.externalId}</td>
       <td class="num">${fmt(a.floatLimitMinor,'BRL')} BRL</td>
-      <td class="num">${(a.commissionBps/100).toFixed(2)}%</td></tr>`).join('') || '<tr><td colspan=3 class="muted">nenhum agente</td></tr>';
+      <td class="num">${(a.commissionBps/100).toFixed(2)}%</td>
+      <td><span class="chip ${a.status==='active'?'em':'red'}">${a.status}</span></td></tr>`).join('') || '<tr><td colspan=4 class="muted">nenhum agente</td></tr>';
+
+    // Payouts (Haiti) — always-wired endpoint; ignore if unavailable.
+    try {
+      const payouts = await api('GET','/payouts');
+      const pstatus = (s) => ({created:'amber',submitted:'gold',settled:'em',reversed:'red'}[s] || 'gray');
+      $('payouts').innerHTML = payouts.map(p => `<tr><td class="mono" style="font-size:11px">${p.correlationId}</td>
+        <td class="muted">${p.recipientRef}</td>
+        <td class="num">${fmt(p.amountMinor,p.currency)} ${p.currency}</td>
+        <td><span class="chip ${pstatus(p.status)}">${p.status}</span></td></tr>`).join('') || '<tr><td colspan=4 class="muted">nenhum pagamento</td></tr>';
+    } catch (_) { /* payouts not wired */ }
   } catch (e) {
     $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';
     toast(e.message, true);
@@ -198,6 +217,10 @@ const FORMS = {
   'Cash in': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-in',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
   'Cash out': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-out',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
   'Transfer BR→HT': { fields:[['senderId','remetente'],['recipientRef','destinatário'],['sendAmount','envia (R$)'],['feeAmount','taxa (R$)']], run:(v)=>api('POST','/transactions/transfer',{senderId:v.senderId,recipientRef:v.recipientRef,fromCurrency:'BRL',toCurrency:'HTG',sendAmount:v.sendAmount,feeAmount:v.feeAmount||'0',rate:'24.36',idempotencyKey:idem()}) },
+  'Liberar pagamento (manual)': { fields:[['correlationId','correlationId do payout'],['providerRef','ref Natcash/MonCash (opcional)']], run:(v)=>api('POST',`/payouts/${v.correlationId}/release`, v.providerRef?{providerRef:v.providerRef}:{}) },
+  'Reverter pagamento (manual)': { fields:[['correlationId','correlationId do payout']], run:(v)=>api('POST',`/payouts/${v.correlationId}/fail`,{}) },
+  'Bloquear/ativar agente': { fields:[['externalId','agente'],['status','active ou blocked']], run:(v)=>api('POST',`/agents/${v.externalId}/status`,{status:v.status}) },
+  'Bloquear/ativar cliente': { fields:[['externalId','cliente'],['status','active ou blocked']], run:(v)=>api('POST',`/customers/${v.externalId}/status`,{status:v.status}) },
 };
 let activeForm = Object.keys(FORMS)[0];
 function renderTabs() {

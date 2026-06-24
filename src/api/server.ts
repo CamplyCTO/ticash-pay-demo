@@ -44,12 +44,13 @@ export function defaultDeps(): ServerDeps {
       events: createProviderEventStore(),
     };
   }
-  if (config.moncash.enabled) {
-    const port = new MonCashPayoutAdapter(config.moncash);
-    deps.payouts = { service: new PayoutService(port, createPayoutStore(), ledger) };
-  }
+  // Payout state machine is always available; the provider is optional. Without a
+  // provider (MonCash not yet enabled) payouts run in MANUAL mode — the operator
+  // releases them by hand (Natcash/MonCash) via the panel.
+  const payoutPort = config.moncash.enabled ? new MonCashPayoutAdapter(config.moncash) : undefined;
+  deps.payouts = { service: new PayoutService(payoutPort, createPayoutStore(), ledger) };
   deps.transfers = {
-    service: new TransferService(ledger, createTransferStore(), deps.payouts?.service),
+    service: new TransferService(ledger, createTransferStore(), deps.payouts.service),
   };
   return deps;
 }
@@ -84,6 +85,7 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
       code === 'INSUFFICIENT_FUNDS' ? 409 :
       code === 'CONFLICT' ? 409 :
       code === 'NOT_FOUND' ? 404 :
+      code === 'FORBIDDEN' ? 403 :
       code === 'UNBALANCED' ? 422 :
       err.statusCode ?? 400;
     reply.status(status).send({ error: err.name ?? 'Error', code, message: err.message });

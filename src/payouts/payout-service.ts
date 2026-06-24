@@ -16,7 +16,7 @@ import { PayoutPort } from './types';
  */
 export class PayoutService {
   constructor(
-    private readonly port: PayoutPort,
+    private readonly port: PayoutPort | undefined,
     private readonly store: PayoutStore,
     private readonly ledger: LedgerService,
   ) {}
@@ -40,7 +40,7 @@ export class PayoutService {
     };
     return this.store.create({
       correlationId: args.correlationId,
-      provider: this.port.name,
+      provider: this.port?.name ?? 'manual',
       recipientRef: args.recipientRef,
       currency: quote.toCurrency,
       amountMinor: quote.receiveMinor,
@@ -48,12 +48,14 @@ export class PayoutService {
     });
   }
 
-  /** Send the payout to the provider. created → submitted. */
+  /** Send the payout to the provider. created → submitted. Requires a provider. */
   async submit(correlationId: string): Promise<PayoutRecord> {
     const p = await this.require(correlationId);
     if (p.status !== 'created') return p; // already submitted/settled/reversed
+    const port = this.port;
+    if (!port) throw new Error('no payout provider configured — use releaseManually');
     try {
-      const res = await this.port.sendPayout({
+      const res = await port.sendPayout({
         correlationId,
         currency: p.currency,
         amountMinor: p.amountMinor,
@@ -77,11 +79,32 @@ export class PayoutService {
   /** Poll the provider and advance: success → settle, failure → reverse. */
   async sync(correlationId: string): Promise<PayoutRecord> {
     const p = await this.require(correlationId);
-    if (p.status !== 'submitted' || !p.providerRef) return p;
+    if (p.status !== 'submitted' || !p.providerRef || !this.port) return p;
     const status = await this.port.getStatus(p.providerRef);
     if (status.state === 'success') return this.settle(p);
     if (status.state === 'failed') return this.reverse(p);
     return p; // pending
+  }
+
+  /**
+   * MANUAL mode (no auto-disbursement yet): the operator paid the recipient out of
+   * band (Natcash/MonCash by hand) and releases the payout here → posts settlePayout.
+   * Idempotent; `providerRef` is the external tx id the operator used, if any.
+   */
+  async releaseManually(correlationId: string, providerRef?: string): Promise<PayoutRecord> {
+    const p = await this.require(correlationId);
+    if (p.status === 'settled') return p;
+    if (p.status === 'reversed') throw new Error(`payout ${correlationId} already reversed`);
+    const withRef = providerRef ? await this.store.update(correlationId, { providerRef }) : p;
+    return this.settle(withRef);
+  }
+
+  /** MANUAL mode: the out-of-band payout failed — reverse it (refund the sender). */
+  async failManually(correlationId: string): Promise<PayoutRecord> {
+    const p = await this.require(correlationId);
+    if (p.status === 'reversed') return p;
+    if (p.status === 'settled') throw new Error(`payout ${correlationId} already settled`);
+    return this.reverse(p);
   }
 
   private async settle(p: PayoutRecord): Promise<PayoutRecord> {

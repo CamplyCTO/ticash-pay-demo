@@ -48,6 +48,16 @@ export class PgRegistryStore implements RegistryStore {
     return mapCustomer(res.rows[0]);
   }
 
+  async setCustomerStatus(externalId: string, status: 'active' | 'blocked'): Promise<Customer> {
+    const res = await this.pool.query(
+      `UPDATE customers SET status = $2 WHERE external_id = $1
+       RETURNING external_id, kyc_level, kyc_status, status, created_at`,
+      [externalId, status],
+    );
+    if (!res.rows[0]) throw new RegistryError(`customer ${externalId} not found`, 'NOT_FOUND');
+    return mapCustomer(res.rows[0]);
+  }
+
   async createAgent(input: CreateAgentInput): Promise<Agent> {
     try {
       const res = await this.pool.query(
@@ -78,6 +88,16 @@ export class PgRegistryStore implements RegistryStore {
       `SELECT external_id, float_limit_minor, commission_bps, status, created_at FROM agents ORDER BY external_id`,
     );
     return res.rows.map(mapAgent);
+  }
+
+  async setAgentStatus(externalId: string, status: 'active' | 'blocked'): Promise<Agent> {
+    const res = await this.pool.query(
+      `UPDATE agents SET status = $2 WHERE external_id = $1
+       RETURNING external_id, float_limit_minor, commission_bps, status, created_at`,
+      [externalId, status],
+    );
+    if (!res.rows[0]) throw new RegistryError(`agent ${externalId} not found`, 'NOT_FOUND');
+    return mapAgent(res.rows[0]);
   }
 }
 
