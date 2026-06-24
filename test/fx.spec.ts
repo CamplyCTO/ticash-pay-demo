@@ -58,6 +58,22 @@ describe('transfer locks the FX-service rate when none is supplied', () => {
     expect(await ledger.getBalance(sys('payout_suspense', 'HTG'))).toBe(238728n);
     expect((await store.get(r.correlationId))!.rate).toBe('23.8728'); // locked on the record
   });
+
+  it('a duplicate initiate returns the LOCKED rate even if the live rate changed', async () => {
+    const ledger = new LedgerService(new InMemoryLedgerStore());
+    await ledger.fundWallet({ customerId: 'jean', currency: 'BRL', amountMinor: 100000n, idempotencyKey: 'f' });
+    const rates = new RateService(new InMemoryRateStore(200));
+    const svc = new TransferService(ledger, new InMemoryTransferStore(), undefined, rates);
+    const args = { senderId: 'jean', recipientRef: '509', fromCurrency: 'BRL' as const, toCurrency: 'HTG' as const, sendMinor: 10000n, feeMinor: 0n, idempotencyKey: 'dup' };
+
+    const r1 = await svc.initiate(args);
+    expect(r1.quote.rate).toBe('23.8728');
+    await rates.setRate('BRL', 'HTG', '30.00', 0); // live rate jumps to 30.00
+    const r2 = await svc.initiate(args); // replay
+    expect(r2.correlationId).toBe(r1.correlationId);
+    expect(r2.quote.rate).toBe('23.8728'); // still the locked rate, NOT 30.00
+    expect(await ledger.getBalance(sys('payout_suspense', 'HTG'))).toBe(238728n); // not re-priced/doubled
+  });
 });
 
 describe('FX HTTP endpoints', () => {

@@ -57,9 +57,12 @@ export class TransferService {
       rate, // the LOCKED rate (caller-supplied or priced by the FX service)
       receiveMinor: quote.receiveMinor,
     };
-    await this.store.create(intent); // idempotent on correlationId
+    // Idempotent on correlationId: returns the EXISTING record on a replay. Build the
+    // response quote from the persisted record so a duplicate call always reports the
+    // LOCKED rate, even if the live rate changed between calls.
+    const created = await this.store.create(intent);
     const record = await this.run(correlationId);
-    return { correlationId, quote, status: record.status };
+    return { correlationId, quote: quoteFrom(created), status: record.status };
   }
 
   /** Execute whatever steps remain for this transfer. Safe to call repeatedly. */
