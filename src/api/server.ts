@@ -19,6 +19,7 @@ import { PaymentIntentStore } from '../payments/intent-store';
 import { ProviderEventStore } from '../payments/event-store';
 import { PaymentInPort } from '../payments/types';
 import { MonCashPayoutAdapter } from '../payouts/moncash-adapter';
+import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import { PayoutService } from '../payouts/payout-service';
 import { TransferService } from '../transfers/transfer-service';
 import { registerRoutes } from './routes';
@@ -44,10 +45,14 @@ export function defaultDeps(): ServerDeps {
       events: createProviderEventStore(),
     };
   }
-  // Payout state machine is always available; the provider is optional. Without a
-  // provider (MonCash not yet enabled) payouts run in MANUAL mode — the operator
-  // releases them by hand (Natcash/MonCash) via the panel.
-  const payoutPort = config.moncash.enabled ? new MonCashPayoutAdapter(config.moncash) : undefined;
+  // Payout state machine is always available; the provider is optional. Natcash
+  // (BenCash) is the current Haiti rail; MonCash is the fallback once enabled.
+  // Without any provider, payouts run in MANUAL mode (operator releases via panel).
+  const payoutPort = config.natcash.enabled
+    ? new NatcashPayoutAdapter(config.natcash)
+    : config.moncash.enabled
+      ? new MonCashPayoutAdapter(config.moncash)
+      : undefined;
   deps.payouts = { service: new PayoutService(payoutPort, createPayoutStore(), ledger) };
   deps.transfers = {
     service: new TransferService(ledger, createTransferStore(), deps.payouts.service),

@@ -30,4 +30,10 @@ export const config = {
     clientId: process.env.MONCASH_CLIENT_ID ?? '',
     clientSecret: process.env.MONCASH_CLIENT_SECRET ?? '',
   },
+  /** Natcash payout via BenCash (Haiti). Enabled when a private key is present. */
+  natcash: {
+    enabled: !!process.env.NATCASH_PRIVATE_KEY,
+    base: process.env.NATCASH_BASE ?? 'https://reseller.test.bencashgroup.com/api/channel',
+    privateKey: process.env.NATCASH_PRIVATE_KEY ?? '',
+  },
 } as const;
