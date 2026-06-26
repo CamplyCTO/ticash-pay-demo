@@ -53,4 +53,20 @@ export const config = {
     base: process.env.DINGCONNECT_BASE ?? 'https://api.dingconnect.com/api/V1',
     apiKey: process.env.DINGCONNECT_API_KEY ?? '',
   },
+  /** Sumsub KYC. Enabled when an app token is present. */
+  sumsub: {
+    enabled: !!process.env.SUMSUB_APP_TOKEN,
+    base: process.env.SUMSUB_BASE ?? 'https://api.sumsub.com',
+    appToken: process.env.SUMSUB_APP_TOKEN ?? '',
+    secretKey: process.env.SUMSUB_SECRET_KEY ?? '',
+    levelName: process.env.SUMSUB_LEVEL ?? 'id-and-liveness',
+  },
+  /** KYC transaction limits: per-transaction BRL cap by KYC level (major units). */
+  kyc: {
+    limitByLevel: {
+      0: Number(process.env.KYC_LIMIT_L0 ?? 500),
+      1: Number(process.env.KYC_LIMIT_L1 ?? 5000),
+      2: Number(process.env.KYC_LIMIT_L2 ?? 50000),
+    } as Record<number, number>,
+  },
 } as const;

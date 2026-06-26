@@ -96,6 +96,8 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema.optional(), rate: z.string().optional(), idempotencyKey: z.string().min(1) }).parse(req.body);
     await assertActiveCustomer(b.senderId);
     if (deps.screening) await deps.screening.service.assertClear(b.recipientRef, 'transfer');
+    // KYC tier limit: the send amount must be within the sender's verification cap.
+    if (deps.kyc) await deps.kyc.limits.assertWithinLimit(b.senderId, money(b.sendAmount, b.fromCurrency), b.fromCurrency);
     // `rate` and `feeAmount` are optional: when omitted, the corridor config supplies
     // the locked rate (FX margin) and the platform fee (WS-6/WS-7).
     const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), ...(b.feeAmount !== undefined ? { feeMinor: money(b.feeAmount, b.fromCurrency) } : {}), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
@@ -180,6 +182,24 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       await assertActiveCustomer(b.customerId);
       return air.topup({ customerId: b.customerId, currency: 'BRL', accountNumber: b.accountNumber, skuCode: b.skuCode, amountMinor: money(b.sendAmount, 'BRL'), idempotencyKey: b.idempotencyKey });
     });
+  }
+
+  // ---- KYC: transaction limits (always) + Sumsub verification (when configured) ----
+  if (deps.kyc) {
+    const { limits, service } = deps.kyc;
+    app.get('/kyc/limits', async () => limits.table());
+    if (service) {
+      // Mint a WebSDK access token so the customer can submit documents in the frontend.
+      app.post('/kyc/start', async (req) => {
+        const b = z.object({ customerId: z.string().min(1) }).parse(req.body);
+        return service.start(b.customerId);
+      });
+      // Pull the provider's latest review and persist it on the customer.
+      app.post('/kyc/sync', async (req) => {
+        const b = z.object({ customerId: z.string().min(1) }).parse(req.body);
+        return service.sync(b.customerId);
+      });
+    }
   }
 
   // ---- money-in (Lytex: PIX + card) ---------------------------------------

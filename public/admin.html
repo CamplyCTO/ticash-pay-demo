@@ -248,6 +248,8 @@ const FORMS = {
   'Bloquear/ativar cliente': { fields:[['externalId','cliente'],['status','active ou blocked']], run:(v)=>api('POST',`/customers/${v.externalId}/status`,{status:v.status}) },
   'Verificar sanções (AML)': { fields:[['name','nome completo']], run: async (v)=>{ const r = await api('POST','/screening/check',{name:v.name}); if (r.hit) window.alert('⚠️ SANÇÃO ENCONTRADA:\n'+r.matches.map(m=>`${m.matchedName} (${m.list}${m.program?' / '+m.program:''}) — ${(m.score*100).toFixed(0)}%`).join('\n')); else toast('✓ Sem correspondência (limpo)'); return r; } },
   'Recarga de celular': { fields:[['customerId','cliente'],['accountNumber','telefone (509…)'],['skuCode','SKU (ex: 4RHT10700)'],['sendAmount','valor (R$)']], run:(v)=>api('POST','/airtime/topup',{customerId:v.customerId,accountNumber:v.accountNumber,skuCode:v.skuCode,sendAmount:v.sendAmount,idempotencyKey:idem()}) },
+  'Iniciar KYC (Sumsub)': { fields:[['customerId','cliente']], run: async (v)=>{ const r = await api('POST','/kyc/start',{customerId:v.customerId}); toast('✓ Token KYC gerado (nível '+r.levelName+') — usar no SDK do front'); return r; } },
+  'Sincronizar KYC': { fields:[['customerId','cliente']], run: async (v)=>{ const r = await api('POST','/kyc/sync',{customerId:v.customerId}); toast('KYC: '+r.review+' (nível '+r.kycLevel+')'); return r; } },
 };
 let activeForm = Object.keys(FORMS)[0];
 function renderTabs() {

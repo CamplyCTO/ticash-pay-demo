@@ -3,7 +3,7 @@ import { Agent, CreateAgentInput, CreateCustomerInput, Customer, KycStatus, Part
 export class RegistryError extends Error {
   constructor(
     message: string,
-    readonly code: 'CONFLICT' | 'NOT_FOUND' | 'VALIDATION' | 'FORBIDDEN' = 'VALIDATION',
+    readonly code: 'CONFLICT' | 'NOT_FOUND' | 'VALIDATION' | 'FORBIDDEN' | 'LIMIT_EXCEEDED' = 'VALIDATION',
   ) {
     super(message);
     this.name = 'RegistryError';

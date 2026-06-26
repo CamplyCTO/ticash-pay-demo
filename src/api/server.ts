@@ -20,6 +20,9 @@ import { ScreeningService } from '../screening/screening-service';
 import { DEFAULT_SANCTIONS } from '../screening/sanctions-list';
 import { DingConnectAdapter } from '../airtime/dingconnect-adapter';
 import { AirtimeService } from '../airtime/airtime-service';
+import { SumsubAdapter } from '../kyc/sumsub-adapter';
+import { KycService } from '../kyc/kyc-service';
+import { KycLimits } from '../kyc/limits';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
 import { seedDemo } from '../demo/seed';
@@ -48,6 +51,8 @@ export interface ServerDeps {
   screening?: { service: ScreeningService };
   /** Mobile airtime recharge (DingConnect). Present when a key is configured. */
   airtime?: { service: AirtimeService };
+  /** KYC: Sumsub verification (when configured) + per-level transaction limits (always on). */
+  kyc?: { service?: KycService; limits: KycLimits };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -81,6 +86,11 @@ export function defaultDeps(): ServerDeps {
   if (config.dingconnect.enabled) {
     deps.airtime = { service: new AirtimeService(new DingConnectAdapter(config.dingconnect), ledger) };
   }
+  // KYC limits are always enforced; the Sumsub verification service is added when configured.
+  const kycLimits = new KycLimits(deps.registry, config.kyc.limitByLevel);
+  deps.kyc = config.sumsub.enabled
+    ? { limits: kycLimits, service: new KycService(new SumsubAdapter(config.sumsub), deps.registry, config.sumsub.levelName) }
+    : { limits: kycLimits };
   return deps;
 }
 
@@ -115,6 +125,7 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
       code === 'CONFLICT' ? 409 :
       code === 'NOT_FOUND' ? 404 :
       code === 'FORBIDDEN' ? 403 :
+      code === 'LIMIT_EXCEEDED' ? 422 :
       code === 'UNBALANCED' ? 422 :
       err.statusCode ?? 400;
     reply.status(status).send({ error: err.name ?? 'Error', code, message: err.message });
