@@ -76,6 +76,35 @@ describe('provider-fee reconciliation — end to end', () => {
     expect(report.byProvider[0]).toMatchObject({ provider: 'manual', currency: 'HTG', settledCount: 1, totalProviderFeeMinor: p.providerFeeMinor, totalGrossMinor: gross, totalNetToRecipientMinor: gross - p.providerFeeMinor });
   });
 
+  it('a REVERSED payout contributes no provider fee (fee was locked but never realized)', async () => {
+    const { ledger, payoutStore, payouts, transfers, recon } = await setup();
+    const r = await transfers.initiate({ senderId: 'jean', recipientRef: 'Marie', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, idempotencyKey: 'rev1' });
+    expect((await payoutStore.list())[0]!.providerFeeMinor).toBeGreaterThan(0n); // fee was locked at creation
+
+    await payouts.failManually(r.correlationId); // provider failed -> reverse + refund
+
+    expect(await ledger.getBalance(sys('provider_fee', 'HTG'))).toBe(0n); // fee never posted
+    const report = await recon.report();
+    expect(report.byProvider).toHaveLength(0); // nothing settled
+    expect(report.consistent).toBe(true);
+    expect(await ledger.getBalance({ ownerType: 'customer', ownerId: 'jean', kind: 'wallet', currency: 'BRL' })).toBe(1_000_000n); // fully refunded
+    expect((await ledger.reconcile()).balanced).toBe(true);
+  });
+
+  it('mixed settled + reversed: only the settled fee counts, invariant holds', async () => {
+    const { ledger, payouts, transfers, recon } = await setup();
+    const ok = await transfers.initiate({ senderId: 'jean', recipientRef: 'A', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 30000n, idempotencyKey: 'mix-ok' });
+    const bad = await transfers.initiate({ senderId: 'jean', recipientRef: 'B', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 20000n, idempotencyKey: 'mix-bad' });
+    await payouts.releaseManually(ok.correlationId);
+    await payouts.failManually(bad.correlationId);
+
+    const report = await recon.report();
+    expect(report.consistent).toBe(true); // ledger provider_fee == Σ settled fees
+    expect(report.byProvider).toHaveLength(1);
+    expect(report.byProvider[0]!.settledCount).toBe(1);
+    expect(report.byProvider[0]!.totalProviderFeeMinor).toBe(await ledger.getBalance(sys('provider_fee', 'HTG')));
+  });
+
   it('matches our recorded fee against the rail statement and reports the delta', async () => {
     const { payouts, transfers, recon } = await setup();
     const r = await transfers.initiate({ senderId: 'jean', recipientRef: 'Marie', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, idempotencyKey: 'x2' });
