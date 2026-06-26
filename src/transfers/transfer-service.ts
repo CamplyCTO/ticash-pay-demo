@@ -4,6 +4,7 @@ import { LedgerError } from '../ledger/engine';
 import { LedgerService, deriveUuid } from '../ledger/service';
 import { PayoutService } from '../payouts/payout-service';
 import { RateService } from '../fx/rate-service';
+import { TransferPricing } from '../fx/types';
 import { NewTransfer, TransferRecord, TransferStore } from './transfer-store';
 
 /**
@@ -31,17 +32,22 @@ export class TransferService {
     fromCurrency: Currency;
     toCurrency: Currency;
     sendMinor: bigint;
-    feeMinor: bigint;
+    feeMinor?: bigint; // optional: when omitted, the corridor's platform fee (bps) is applied
     rate?: string; // optional: when omitted, the rate service prices + LOCKS the rate
     idempotencyKey: string;
   }): Promise<{ correlationId: string; quote: TransferQuote; status: TransferRecord['status'] }> {
-    // Lock the rate at quote time: caller-supplied rate, else priced by the FX service.
-    const rate = args.rate ?? (await this.priceRate(args.fromCurrency, args.toCurrency));
+    // Lock rate + fee at quote time: caller-supplied, else priced from the corridor config.
+    const priced =
+      args.rate === undefined || args.feeMinor === undefined
+        ? await this.price(args.fromCurrency, args.toCurrency, args.sendMinor)
+        : undefined;
+    const rate = args.rate ?? (priced as TransferPricing).rate;
+    const feeMinor = args.feeMinor ?? (priced as TransferPricing).platformFeeMinor;
     const quote = quoteTransfer({
       fromCurrency: args.fromCurrency,
       toCurrency: args.toCurrency,
       sendMinor: args.sendMinor,
-      feeMinor: args.feeMinor,
+      feeMinor,
       rate,
     });
     const correlationId = deriveUuid(args.idempotencyKey);
@@ -53,7 +59,7 @@ export class TransferService {
       fromCurrency: args.fromCurrency,
       toCurrency: args.toCurrency,
       sendMinor: args.sendMinor,
-      feeMinor: args.feeMinor,
+      feeMinor, // the LOCKED fee (caller-supplied or the corridor's platform fee)
       rate, // the LOCKED rate (caller-supplied or priced by the FX service)
       receiveMinor: quote.receiveMinor,
     };
@@ -127,9 +133,9 @@ export class TransferService {
     return this.store.listIncomplete();
   }
 
-  private async priceRate(from: Currency, to: Currency): Promise<string> {
-    if (!this.rates) throw new LedgerError('no rate provided and no FX rate service configured', 'VALIDATION');
-    return (await this.rates.quote(from, to)).rate;
+  private async price(from: Currency, to: Currency, sendMinor: bigint): Promise<TransferPricing> {
+    if (!this.rates) throw new LedgerError('no rate/fee provided and no FX rate service configured', 'VALIDATION');
+    return this.rates.priceTransfer(from, to, sendMinor);
   }
 }
 

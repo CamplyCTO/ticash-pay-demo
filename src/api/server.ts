@@ -164,7 +164,7 @@ if (require.main === module) {
       app.log.info('seeded demo data');
     }
     // Seed default FX rates if absent (Postgres; in-memory self-seeds).
-    if (deps.fx) await seedDefaultRates(deps.fx.store, config.fx.defaultMarginBps);
+    if (deps.fx) await seedDefaultRates(deps.fx.store, { marginBps: config.fx.defaultMarginBps, platformFeeBps: config.fx.defaultPlatformFeeBps, providerFeeBps: config.fx.defaultProviderFeeBps });
     // Recovery sweep: resume any transfer left half-finished by a previous crash.
     if (deps.transfers) {
       const resumed = await deps.transfers.service.recover();

@@ -126,8 +126,8 @@
       <div class="panel">
         <h2>💱 Taxas de câmbio (FX)</h2>
         <div class="body" style="max-height:220px; overflow:auto">
-          <table><thead><tr><th>par</th><th class="num">média</th><th class="num">margem</th><th class="num">taxa cliente</th></tr></thead><tbody id="fxrates"></tbody></table>
-          <div class="muted" style="margin-top:8px">Taxa do cliente = média − margem. Ajuste em <b>Definir taxa FX</b>. A taxa é travada no momento da transferência.</div>
+          <table><thead><tr><th>par</th><th class="num">média</th><th class="num">sua margem</th><th class="num">sua taxa</th><th class="num">taxa deles</th><th class="num">cliente recebe / R$100</th></tr></thead><tbody id="fxrates"></tbody></table>
+          <div class="muted" style="margin-top:8px">Ajuste sua margem, sua taxa e a taxa do provedor em <b>Definir taxa FX</b>. Use <b>/fx/quote?from=BRL&to=HTG&amount=100</b> pra ver o lucro líquido. A taxa é travada na transferência.</div>
         </div>
       </div>
     </div>
@@ -211,11 +211,16 @@ async function refresh() {
     // FX rates (mid + margin -> customer rate).
     try {
       const rates = await api('GET','/fx/rates');
-      $('fxrates').innerHTML = rates.map(r => { const cli = (Number(r.midRate) * (10000 - r.marginBps) / 10000); return `<tr>
+      $('fxrates').innerHTML = rates.map(r => {
+        const cliRate = Number(r.midRate) * (10000 - r.marginBps) / 10000;       // taxa do cliente
+        const net = 100 * cliRate * (10000 - r.providerFeeBps) / 10000;          // recebido líquido por 100 enviados
+        return `<tr>
         <td>${r.fromCurrency}→${r.toCurrency}</td>
         <td class="num">${r.midRate}</td>
         <td class="num">${(r.marginBps/100).toFixed(2)}%</td>
-        <td class="num cr">${cli.toFixed(4).replace(/0+$/,'').replace(/\.$/,'')}</td></tr>`; }).join('') || '<tr><td colspan=4 class="muted">sem taxas</td></tr>';
+        <td class="num">${(r.platformFeeBps/100).toFixed(2)}%</td>
+        <td class="num db">${(r.providerFeeBps/100).toFixed(2)}%</td>
+        <td class="num cr">${net.toFixed(2)} ${r.toCurrency}</td></tr>`; }).join('') || '<tr><td colspan=6 class="muted">sem taxas</td></tr>';
     } catch (_) { /* fx not wired */ }
   } catch (e) {
     $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';
@@ -235,7 +240,7 @@ const FORMS = {
   'Cash in': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-in',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
   'Cash out': { fields:[['agentId','agente'],['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/cash-out',{agentId:v.agentId,customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
   'Transfer BR→HT': { fields:[['senderId','remetente'],['recipientRef','destinatário'],['sendAmount','envia (R$)'],['feeAmount','taxa (R$)']], run:(v)=>api('POST','/transactions/transfer',{senderId:v.senderId,recipientRef:v.recipientRef,fromCurrency:'BRL',toCurrency:'HTG',sendAmount:v.sendAmount,feeAmount:v.feeAmount||'0',idempotencyKey:idem()}) },
-  'Definir taxa FX': { fields:[['from','de (ex: BRL)'],['to','para (ex: HTG)'],['midRate','taxa média (ex: 24.36)'],['marginBps','margem bps (ex: 200 = 2%)']], run:(v)=>api('POST','/fx/rates',{from:v.from,to:v.to,midRate:v.midRate,marginBps:Number(v.marginBps||0)}) },
+  'Definir taxa FX': { fields:[['from','de (ex: BRL)'],['to','para (ex: HTG)'],['midRate','taxa média (ex: 24.36)'],['marginBps','sua margem bps (200=2%)'],['platformFeeBps','sua taxa bps (100=1%)'],['providerFeeBps','taxa deles bps (335=3,35%)']], run:(v)=>api('POST','/fx/rates',{from:v.from,to:v.to,midRate:v.midRate,marginBps:Number(v.marginBps||0),platformFeeBps:Number(v.platformFeeBps||0),providerFeeBps:Number(v.providerFeeBps||0)}) },
   'Enviar pagamento (Natcash)': { fields:[['correlationId','correlationId do payout']], run: async (v)=>{ await api('POST',`/payouts/${v.correlationId}/submit`,{}); return api('POST',`/payouts/${v.correlationId}/sync`,{}); } },
   'Liberar pagamento (manual)': { fields:[['correlationId','correlationId do payout'],['providerRef','ref Natcash/MonCash (opcional)']], run:(v)=>api('POST',`/payouts/${v.correlationId}/release`, v.providerRef?{providerRef:v.providerRef}:{}) },
   'Reverter pagamento (manual)': { fields:[['correlationId','correlationId do payout']], run:(v)=>api('POST',`/payouts/${v.correlationId}/fail`,{}) },

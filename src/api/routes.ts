@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { assertCurrency, Currency } from '../money/currency';
-import { convert, toMinor } from '../money/money';
+import { toMinor } from '../money/money';
 import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
 import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
@@ -93,17 +93,18 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   });
 
   app.post('/transactions/transfer', async (req) => {
-    const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema, rate: z.string().optional(), idempotencyKey: z.string().min(1) }).parse(req.body);
+    const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema.optional(), rate: z.string().optional(), idempotencyKey: z.string().min(1) }).parse(req.body);
     await assertActiveCustomer(b.senderId);
-    // `rate` is optional: when omitted, the FX service prices + locks it (WS-6).
-    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
+    // `rate` and `feeAmount` are optional: when omitted, the corridor config supplies
+    // the locked rate (FX margin) and the platform fee (WS-6/WS-7).
+    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), ...(b.feeAmount !== undefined ? { feeMinor: money(b.feeAmount, b.fromCurrency) } : {}), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
     // Crash-safe saga (persists intent, resumable, creates the payout). Falls back to a
     // direct ledger transfer when no saga is wired (e.g. lightweight test servers).
     if (deps.transfers) {
       return deps.transfers.service.initiate(transferArgs);
     }
-    if (!b.rate) throw new RegistryError('rate is required (no FX service in this context)', 'VALIDATION');
-    const result = await ledger.initiateTransfer({ ...transferArgs, rate: b.rate });
+    if (!b.rate || b.feeAmount === undefined) throw new RegistryError('rate and fee are required (no FX service in this context)', 'VALIDATION');
+    const result = await ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
     if (deps.payouts) {
       await deps.payouts.service.createForTransfer({ correlationId: result.correlationId, recipientRef: b.recipientRef, quote: result.quote, senderId: b.senderId });
     }
@@ -133,20 +134,20 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   // ---- FX rates (mid + margin -> locked customer rate) --------------------
   if (deps.fx) {
     const fx = deps.fx.service;
-    // Price a pair (and optionally convert an amount) — what the app shows the customer.
+    // Rate only (no amount) or the FULL economics when an amount is given:
+    // customer pays, gross payout, provider fee, net to recipient, platform net profit.
     app.get('/fx/quote', async (req) => {
       const q = z.object({ from: currencySchema, to: currencySchema, amount: amountSchema.optional() }).parse(req.query);
-      const quote = await fx.quote(q.from, q.to);
-      if (q.amount === undefined) return quote;
-      const sendMinor = money(q.amount, q.from);
-      return { ...quote, sendMinor, receiveMinor: convert(sendMinor, q.from, q.to, quote.rate) };
+      if (q.amount === undefined) return fx.quote(q.from, q.to);
+      return fx.priceTransfer(q.from, q.to, money(q.amount, q.from));
     });
     app.get('/fx/rates', async () => fx.list());
-    // Admin: set/update a pair's mid rate + margin.
+    // Admin: set/update a pair's mid rate + margin + platform fee + provider fee.
     app.post('/fx/rates', async (req, reply) => {
-      const b = z.object({ from: currencySchema, to: currencySchema, midRate: z.string().min(1), marginBps: z.number().int().min(0).max(9999) }).parse(req.body);
+      const bps = z.number().int().min(0).max(9999);
+      const b = z.object({ from: currencySchema, to: currencySchema, midRate: z.string().min(1), marginBps: bps, platformFeeBps: bps.optional(), providerFeeBps: bps.optional() }).parse(req.body);
       reply.status(201);
-      return fx.setRate(b.from, b.to, b.midRate, b.marginBps);
+      return fx.setRate(b.from, b.to, b.midRate, b.marginBps, b.platformFeeBps ?? 0, b.providerFeeBps ?? 0);
     });
   }
 

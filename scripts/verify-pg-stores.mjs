@@ -63,14 +63,14 @@ try {
   const tc = await transfers.create({ correlationId: ID, baseIdempotencyKey: 'x', senderId: 'x', recipientRef: 'x', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 1n, feeMinor: 0n, rate: '1', receiveMinor: 1n });
   ok(tc.status === 'completed', 'transfer create idempotent on correlation_id');
 
-  // --- fx rates ---
+  // --- fx rates (with WS-7 fee knobs) ---
   const rates = new PgRateStore(pool);
-  const f1 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.058', marginBps: 100, source: 'manual' });
-  ok(f1.midRate === '0.058' && f1.marginBps === 100 && f1.fromCurrency === 'MXN', 'fx rate set');
+  const f1 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.058', marginBps: 100, platformFeeBps: 50, providerFeeBps: 200, source: 'manual' });
+  ok(f1.midRate === '0.058' && f1.marginBps === 100 && f1.platformFeeBps === 50 && f1.providerFeeBps === 200 && f1.fromCurrency === 'MXN', 'fx rate set with margin + fees');
   const f2 = await rates.get('MXN', 'USD');
-  ok(f2 && f2.toCurrency === 'USD', 'fx rate get (currencies trimmed)');
-  const f3 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.060', marginBps: 50, source: 'manual' });
-  ok(f3.midRate === '0.060' && f3.marginBps === 50, 'fx rate upsert on (from,to)');
+  ok(f2 && f2.toCurrency === 'USD' && f2.platformFeeBps === 50, 'fx rate get (currencies trimmed, fees)');
+  const f3 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.060', marginBps: 50, platformFeeBps: 75, providerFeeBps: 335, source: 'manual' });
+  ok(f3.marginBps === 50 && f3.platformFeeBps === 75 && f3.providerFeeBps === 335, 'fx rate upsert (margin + fees)');
 } finally {
   // cleanup test rows (these tables are separate from the ledger)
   await pool.query('DELETE FROM payment_intents WHERE provider_id = $1', [ID]);

@@ -46,5 +46,7 @@ export function createTransferStore(): TransferStore {
 }
 
 export function createRateStore(): RateStore {
-  return config.useInMemory ? new InMemoryRateStore(config.fx.defaultMarginBps) : new PgRateStore(getPool());
+  return config.useInMemory
+    ? new InMemoryRateStore({ marginBps: config.fx.defaultMarginBps, platformFeeBps: config.fx.defaultPlatformFeeBps, providerFeeBps: config.fx.defaultProviderFeeBps })
+    : new PgRateStore(getPool());
 }

@@ -9,11 +9,17 @@ export const DEFAULT_MID_RATES: Array<{ from: Currency; to: Currency; mid: strin
   { from: 'DOP', to: 'HTG', mid: '2.18' },
 ];
 
+export interface RateDefaults {
+  marginBps: number;
+  platformFeeBps: number;
+  providerFeeBps: number;
+}
+
 /** Seed the default mid-rates if absent (idempotent). Used on boot for Postgres. */
-export async function seedDefaultRates(store: RateStore, marginBps: number): Promise<void> {
+export async function seedDefaultRates(store: RateStore, d: RateDefaults): Promise<void> {
   for (const r of DEFAULT_MID_RATES) {
     if (!(await store.get(r.from, r.to))) {
-      await store.set({ fromCurrency: r.from, toCurrency: r.to, midRate: r.mid, marginBps, source: 'config' });
+      await store.set({ fromCurrency: r.from, toCurrency: r.to, midRate: r.mid, marginBps: d.marginBps, platformFeeBps: d.platformFeeBps, providerFeeBps: d.providerFeeBps, source: 'config' });
     }
   }
 }
@@ -23,11 +29,11 @@ const key = (f: Currency, t: Currency) => `${f}:${t}`;
 export class InMemoryRateStore implements RateStore {
   private readonly rates = new Map<string, RateRecord>();
   constructor(
-    seedMarginBps = 200,
+    seed: RateDefaults = { marginBps: 200, platformFeeBps: 0, providerFeeBps: 335 },
     private readonly clock: () => string = () => new Date(Date.UTC(2026, 0, 1)).toISOString(),
   ) {
     for (const r of DEFAULT_MID_RATES) {
-      this.rates.set(key(r.from, r.to), { fromCurrency: r.from, toCurrency: r.to, midRate: r.mid, marginBps: seedMarginBps, source: 'config', updatedAt: this.clock() });
+      this.rates.set(key(r.from, r.to), { fromCurrency: r.from, toCurrency: r.to, midRate: r.mid, marginBps: seed.marginBps, platformFeeBps: seed.platformFeeBps, providerFeeBps: seed.providerFeeBps, source: 'config', updatedAt: this.clock() });
     }
   }
   async get(from: Currency, to: Currency): Promise<RateRecord | null> {
