@@ -23,7 +23,8 @@ export interface PayoutRecord {
   providerRef: string | null;
   recipientRef: string;
   currency: Currency;
-  amountMinor: bigint;
+  amountMinor: bigint; // gross payout (dest ccy) booked into payout_suspense
+  providerFeeMinor: bigint; // rail's cut (dest ccy), LOCKED at creation, split out at settle
   status: PayoutStatus;
   attempts: number;
   lastError: string | null;
@@ -32,8 +33,14 @@ export interface PayoutRecord {
   updatedAt: string;
 }
 
+/** What a caller supplies to create a payout (lifecycle fields are defaulted). */
+export type NewPayout = Omit<
+  PayoutRecord,
+  'status' | 'attempts' | 'lastError' | 'createdAt' | 'updatedAt' | 'providerRef' | 'providerFeeMinor'
+> & { providerFeeMinor?: bigint };
+
 export interface PayoutStore {
-  create(rec: Omit<PayoutRecord, 'status' | 'attempts' | 'lastError' | 'createdAt' | 'updatedAt' | 'providerRef'>): Promise<PayoutRecord>;
+  create(rec: NewPayout): Promise<PayoutRecord>;
   get(correlationId: string): Promise<PayoutRecord | null>;
   update(correlationId: string, patch: Partial<PayoutRecord>): Promise<PayoutRecord>;
   list(): Promise<PayoutRecord[]>;
@@ -43,12 +50,13 @@ export class InMemoryPayoutStore implements PayoutStore {
   private readonly byId = new Map<string, PayoutRecord>();
   constructor(private readonly clock: () => string = () => new Date(Date.UTC(2026, 0, 1)).toISOString()) {}
 
-  async create(rec: Omit<PayoutRecord, 'status' | 'attempts' | 'lastError' | 'createdAt' | 'updatedAt' | 'providerRef'>): Promise<PayoutRecord> {
+  async create(rec: NewPayout): Promise<PayoutRecord> {
     const existing = this.byId.get(rec.correlationId);
     if (existing) return existing; // idempotent per transfer
     const now = this.clock();
     const full: PayoutRecord = {
       ...rec,
+      providerFeeMinor: rec.providerFeeMinor ?? 0n,
       providerRef: null,
       status: 'created',
       attempts: 0,

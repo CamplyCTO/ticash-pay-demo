@@ -33,6 +33,7 @@ import { PaymentInPort } from '../payments/types';
 import { MonCashPayoutAdapter } from '../payouts/moncash-adapter';
 import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import { PayoutService } from '../payouts/payout-service';
+import { ProviderFeeReconciliation } from '../payouts/reconciliation';
 import { TransferService } from '../transfers/transfer-service';
 import { registerRoutes } from './routes';
 
@@ -45,6 +46,8 @@ export interface ServerDeps {
   payouts?: { service: PayoutService };
   /** Crash-safe transfer saga. Always wired by defaultDeps; optional for tests. */
   transfers?: { service: TransferService };
+  /** Provider-fee reconciliation (settled payouts vs ledger vs the rail's statement). */
+  reconciliation?: { providerFees: ProviderFeeReconciliation };
   /** FX rate service (mid + margin -> locked customer rate). Always wired by defaultDeps. */
   fx?: { service: RateService; store: RateStore };
   /** AML/sanctions screening. Present when screening is enabled. */
@@ -73,7 +76,9 @@ export function defaultDeps(): ServerDeps {
     : config.moncash.enabled
       ? new MonCashPayoutAdapter(config.moncash)
       : undefined;
-  deps.payouts = { service: new PayoutService(payoutPort, createPayoutStore(), ledger) };
+  const payoutStore = createPayoutStore();
+  deps.payouts = { service: new PayoutService(payoutPort, payoutStore, ledger) };
+  deps.reconciliation = { providerFees: new ProviderFeeReconciliation(payoutStore, ledger) };
   const rateStore = createRateStore();
   const rateService = new RateService(rateStore);
   deps.fx = { service: rateService, store: rateStore };

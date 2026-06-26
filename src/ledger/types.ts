@@ -11,7 +11,8 @@ export type AccountKind =
   | 'settlement' // external world / bank rail (PIX in/out, payout out) — system
   | 'fee_revenue' // platform fees — system
   | 'fx_position' // FX desk position per currency — system
-  | 'payout_suspense'; // funds owed to an outbound payout (e.g. MonCash) — system
+  | 'payout_suspense' // funds owed to an outbound payout (e.g. MonCash) — system
+  | 'provider_fee'; // payout rail's fee taken on settlement (e.g. BenCash) — system
 
 /** Account kinds that may NOT carry a negative balance. */
 export const NON_NEGATIVE_KINDS: ReadonlySet<AccountKind> = new Set<AccountKind>([

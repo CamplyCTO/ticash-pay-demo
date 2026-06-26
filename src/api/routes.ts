@@ -134,6 +134,17 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   app.get('/balances', async () => ledger.listBalances());
   app.get('/reconciliation', async () => ledger.reconcile());
 
+  // ---- provider-fee reconciliation ----------------------------------------
+  if (deps.reconciliation) {
+    const recon = deps.reconciliation.providerFees;
+    app.get('/reconciliation/provider-fees', async () => recon.report());
+    // Match our recorded fee for a provider/currency against the rail's reported total.
+    app.post('/reconciliation/provider-fees/match', async (req) => {
+      const b = z.object({ provider: z.string().min(1), currency: currencySchema, reportedAmount: amountSchema }).parse(req.body);
+      return recon.match(b.provider, b.currency, money(b.reportedAmount, b.currency));
+    });
+  }
+
   // ---- FX rates (mid + margin -> locked customer rate) --------------------
   if (deps.fx) {
     const fx = deps.fx.service;

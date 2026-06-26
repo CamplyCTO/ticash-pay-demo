@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Currency } from '../money/currency';
 import * as ops from './operations';
+import { LedgerError } from './engine';
 import { BalanceRow, FeedFilter, FeedRow, LedgerStore, ReconResult } from './store';
 import { AccountSpec, PostedJournal } from './types';
 
@@ -154,14 +155,19 @@ export class LedgerService {
     return this.store.post(ops.reverseAirtime(args));
   }
 
-  /** Settle a confirmed outbound payout (funds leave payout_suspense to recipient). */
-  settlePayout(args: {
+  /** Settle a confirmed outbound payout (funds leave payout_suspense; rail fee split out). */
+  async settlePayout(args: {
     currency: Currency;
     amountMinor: bigint;
     correlationId: string;
     externalRef: string;
     idempotencyKey: string;
+    providerFeeMinor?: bigint;
   }): Promise<PostedJournal> {
+    const fee = args.providerFeeMinor ?? 0n;
+    if (fee < 0n || fee > args.amountMinor) {
+      throw new LedgerError(`provider fee ${fee} out of range for payout ${args.amountMinor}`, 'VALIDATION');
+    }
     return this.store.post(ops.settlePayout(args));
   }
 

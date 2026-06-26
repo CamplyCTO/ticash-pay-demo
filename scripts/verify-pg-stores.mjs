@@ -40,8 +40,9 @@ try {
 
   // --- payouts (state machine + JSONB reversal) ---
   const reversal = { senderId: 'jean', fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, feeMinor: 1250n, receiveMinor: 1218000n, rate: '24.36' };
-  const p1 = await payouts.create({ correlationId: ID, provider: 'moncash', recipientRef: '50912345678', currency: 'HTG', amountMinor: 1218000n, reversal });
+  const p1 = await payouts.create({ correlationId: ID, provider: 'moncash', recipientRef: '50912345678', currency: 'HTG', amountMinor: 1218000n, providerFeeMinor: 40803n, reversal });
   ok(p1.status === 'created' && p1.providerRef === null, 'payout created');
+  ok(p1.providerFeeMinor === 40803n, 'payout provider_fee_minor persisted (migration 0008)');
   const p2 = await payouts.update(ID, { status: 'submitted', providerRef: 'mc-' + ID, attempts: 1 });
   ok(p2.status === 'submitted' && p2.providerRef === 'mc-' + ID && p2.attempts === 1, 'payout update -> submitted');
   const p3 = await payouts.get(ID);

@@ -21,12 +21,15 @@ export class PayoutService {
     private readonly ledger: LedgerService,
   ) {}
 
-  /** Record the outbound leg of a transfer (status `created`). Idempotent per transfer. */
+  /** Record the outbound leg of a transfer (status `created`). Idempotent per transfer.
+   *  `providerFeeMinor` (the rail's cut on the gross payout) is LOCKED here and later
+   *  split out of the settlement so the ledger records the real provider cost. */
   createForTransfer(args: {
     correlationId: string;
     recipientRef: string;
     quote: TransferQuote;
     senderId: string;
+    providerFeeMinor?: bigint;
   }): Promise<PayoutRecord> {
     const { quote } = args;
     const reversal: PayoutReversalContext = {
@@ -44,6 +47,7 @@ export class PayoutService {
       recipientRef: args.recipientRef,
       currency: quote.toCurrency,
       amountMinor: quote.receiveMinor,
+      ...(args.providerFeeMinor !== undefined ? { providerFeeMinor: args.providerFeeMinor } : {}),
       reversal,
     });
   }
@@ -111,6 +115,7 @@ export class PayoutService {
     await this.ledger.settlePayout({
       currency: p.currency,
       amountMinor: p.amountMinor,
+      providerFeeMinor: p.providerFeeMinor,
       correlationId: p.correlationId,
       externalRef: p.providerRef ?? p.correlationId,
       idempotencyKey: `payout-settle:${p.correlationId}`,

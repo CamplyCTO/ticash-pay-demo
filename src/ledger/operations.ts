@@ -20,7 +20,7 @@ export function agentCommission(agentId: string, currency: Currency): AccountSpe
   return { ownerType: 'agent', ownerId: agentId, kind: 'agent_commission', currency };
 }
 export function systemAccount(
-  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense',
+  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense' | 'provider_fee',
   currency: Currency,
 ): AccountSpec {
   return { ownerType: 'system', ownerId: null, kind, currency };
@@ -320,23 +320,34 @@ export function reverseAirtime(args: {
   };
 }
 
-/** Settle a confirmed outbound payout: funds leave the system to the recipient. */
+/**
+ * Settle a confirmed outbound payout: funds leave payout_suspense. When the payout
+ * rail charges a fee (e.g. BenCash ~3.35%), split the gross so the books reflect the
+ * REAL money flow — `settlement` gets the net delivered to the recipient and
+ * `provider_fee` gets the rail's cut (a distinct, reconcilable cost). With no fee it
+ * collapses to the original single settlement posting.
+ *   gross = net(to recipient) + providerFee(to rail)   ⇒ journal still nets to 0.
+ */
 export function settlePayout(args: {
   currency: Currency;
   amountMinor: bigint;
   correlationId: string;
   idempotencyKey: string;
-  externalRef: string; // MonCash payout id
+  externalRef: string; // provider payout id
+  providerFeeMinor?: bigint;
 }): JournalDraft {
   const { currency, amountMinor } = args;
+  const fee = args.providerFeeMinor ?? 0n;
+  const net = amountMinor - fee;
+  // Never emit a zero-amount posting (DB CHECK amount_minor <> 0). gross = net + fee.
+  const postings: PostingDraft[] = [debit(systemAccount('payout_suspense', currency), amountMinor)];
+  if (net > 0n) postings.push(credit(systemAccount('settlement', currency), net));
+  if (fee > 0n) postings.push(credit(systemAccount('provider_fee', currency), fee));
   return {
     type: 'payout',
     idempotencyKey: args.idempotencyKey,
     correlationId: args.correlationId,
     externalRef: args.externalRef,
-    postings: [
-      debit(systemAccount('payout_suspense', currency), amountMinor),
-      credit(systemAccount('settlement', currency), amountMinor),
-    ],
+    postings,
   };
 }

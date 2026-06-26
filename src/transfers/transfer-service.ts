@@ -3,7 +3,7 @@ import { TransferQuote, quoteTransfer } from '../ledger/operations';
 import { LedgerError } from '../ledger/engine';
 import { LedgerService, deriveUuid } from '../ledger/service';
 import { PayoutService } from '../payouts/payout-service';
-import { RateService } from '../fx/rate-service';
+import { RateService, applyBps } from '../fx/rate-service';
 import { TransferPricing } from '../fx/types';
 import { NewTransfer, TransferRecord, TransferStore } from './transfer-store';
 
@@ -102,7 +102,11 @@ export class TransferService {
       // Hand off to the payout state machine (idempotent per correlationId). When no
       // payout rail is configured, funds simply rest in payout_suspense — still complete.
       if (this.payouts) {
-        await this.payouts.createForTransfer({ correlationId, recipientRef: t.recipientRef, quote, senderId: t.senderId });
+        // Lock the rail's fee (corridor providerFeeBps × gross). Resolved here so it
+        // survives crash recovery; the payout's create is idempotent, so the value
+        // computed on the FIRST run is the one that sticks.
+        const providerFeeMinor = await this.resolveProviderFee(t.fromCurrency, t.toCurrency, quote.receiveMinor);
+        await this.payouts.createForTransfer({ correlationId, recipientRef: t.recipientRef, quote, senderId: t.senderId, providerFeeMinor });
       }
       t = await this.store.setStatus(correlationId, 'completed');
     }
@@ -136,6 +140,17 @@ export class TransferService {
   private async price(from: Currency, to: Currency, sendMinor: bigint): Promise<TransferPricing> {
     if (!this.rates) throw new LedgerError('no rate/fee provided and no FX rate service configured', 'VALIDATION');
     return this.rates.priceTransfer(from, to, sendMinor);
+  }
+
+  /** The corridor's payout-rail fee on the gross payout. 0 when no corridor is configured. */
+  private async resolveProviderFee(from: Currency, to: Currency, grossMinor: bigint): Promise<bigint> {
+    if (!this.rates) return 0n;
+    try {
+      const q = await this.rates.quote(from, to);
+      return applyBps(grossMinor, q.providerFeeBps);
+    } catch {
+      return 0n; // no corridor config (e.g. caller-supplied rate on an unconfigured pair)
+    }
   }
 }
 

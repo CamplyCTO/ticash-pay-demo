@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import { Currency } from '../money/currency';
 import {
+  NewPayout,
   PayoutRecord,
   PayoutReversalContext,
   PayoutStore,
@@ -10,15 +11,13 @@ import {
 export class PgPayoutStore implements PayoutStore {
   constructor(private readonly pool: Pool) {}
 
-  async create(
-    rec: Omit<PayoutRecord, 'status' | 'attempts' | 'lastError' | 'createdAt' | 'updatedAt' | 'providerRef'>,
-  ): Promise<PayoutRecord> {
+  async create(rec: NewPayout): Promise<PayoutRecord> {
     const res = await this.pool.query(
-      `INSERT INTO payouts (correlation_id, provider, recipient_ref, currency, amount_minor, reversal)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO payouts (correlation_id, provider, recipient_ref, currency, amount_minor, provider_fee_minor, reversal)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (correlation_id) DO NOTHING
        RETURNING *`,
-      [rec.correlationId, rec.provider, rec.recipientRef, rec.currency, rec.amountMinor.toString(), serializeReversal(rec.reversal)],
+      [rec.correlationId, rec.provider, rec.recipientRef, rec.currency, rec.amountMinor.toString(), (rec.providerFeeMinor ?? 0n).toString(), serializeReversal(rec.reversal)],
     );
     if (res.rows[0]) return mapPayout(res.rows[0]);
     const existing = await this.get(rec.correlationId);
@@ -91,6 +90,7 @@ function mapPayout(r: any): PayoutRecord {
     recipientRef: r.recipient_ref,
     currency: r.currency.trim() as Currency,
     amountMinor: BigInt(r.amount_minor),
+    providerFeeMinor: BigInt(r.provider_fee_minor ?? 0),
     status: r.status,
     attempts: Number(r.attempts),
     lastError: r.last_error,
