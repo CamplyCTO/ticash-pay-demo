@@ -4,7 +4,8 @@ import { KycPort } from './types';
 /**
  * Orchestrates KYC: mint an SDK token to start verification, and sync the provider's
  * review result back onto the customer's kyc_level / kyc_status in the registry.
- * Mapping: approved -> level 2 (full); rejected/review/pending leave the level unchanged.
+ * Mapping: approved -> level 2 (full); rejected -> level 0 (a failed check must DROP any
+ * previously-granted tier, since limits key off kyc_level); review/pending keep the level.
  */
 export class KycService {
   constructor(
@@ -23,7 +24,8 @@ export class KycService {
     const st = await this.port.getStatus(externalUserId);
     const kycStatus = st.review; // 'approved' | 'rejected' | 'review' | 'pending'
     const existing = await this.registry.getCustomer(externalUserId);
-    const kycLevel = st.review === 'approved' ? 2 : existing?.kycLevel ?? 0;
+    const kycLevel =
+      st.review === 'approved' ? 2 : st.review === 'rejected' ? 0 : existing?.kycLevel ?? 0;
     const customer = existing
       ? await this.registry.setCustomerKyc(externalUserId, kycLevel, kycStatus)
       : await this.registry.createCustomer({ externalId: externalUserId, kycLevel, kycStatus });

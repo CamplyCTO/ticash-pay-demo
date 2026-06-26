@@ -69,11 +69,19 @@ describe('KycService — sync persists the review onto the customer', () => {
     expect((await reg.getCustomer('cust-1'))!.kycLevel).toBe(2);
   });
 
-  it('rejected -> keeps the level, status rejected', async () => {
+  it('rejected -> DROPS to level 0 (a failed check must revoke a prior tier)', async () => {
     const reg = new InMemoryRegistryStore();
-    await reg.createCustomer({ externalId: 'cust-2', kycLevel: 1, kycStatus: 'approved' });
+    await reg.createCustomer({ externalId: 'cust-2', kycLevel: 2, kycStatus: 'approved' });
     const out = await new KycService(new FakePort('rejected'), reg, 'id-and-liveness').sync('cust-2');
-    expect(out).toMatchObject({ review: 'rejected', kycLevel: 1, kycStatus: 'rejected' });
+    expect(out).toMatchObject({ review: 'rejected', kycLevel: 0, kycStatus: 'rejected' });
+    expect((await reg.getCustomer('cust-2'))!.kycLevel).toBe(0);
+  });
+
+  it('review (in-progress) keeps the existing level', async () => {
+    const reg = new InMemoryRegistryStore();
+    await reg.createCustomer({ externalId: 'cust-3', kycLevel: 1, kycStatus: 'approved' });
+    const out = await new KycService(new FakePort('review'), reg, 'id-and-liveness').sync('cust-3');
+    expect(out).toMatchObject({ review: 'review', kycLevel: 1 }); // unchanged mid-verification
   });
 
   it('creates the customer if it does not exist yet', async () => {
