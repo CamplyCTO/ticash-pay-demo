@@ -40,6 +40,7 @@ export type TxType =
   | 'float_topup'
   | 'transfer'
   | 'payout'
+  | 'airtime'
   | 'reversal';
 
 /** One immutable double-entry line, pre-persistence. */

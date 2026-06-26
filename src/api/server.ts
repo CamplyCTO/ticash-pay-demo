@@ -18,6 +18,8 @@ import { seedDefaultRates } from '../fx/rate-store';
 import { RateStore } from '../fx/types';
 import { ScreeningService } from '../screening/screening-service';
 import { DEFAULT_SANCTIONS } from '../screening/sanctions-list';
+import { DingConnectAdapter } from '../airtime/dingconnect-adapter';
+import { AirtimeService } from '../airtime/airtime-service';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
 import { seedDemo } from '../demo/seed';
@@ -44,6 +46,8 @@ export interface ServerDeps {
   fx?: { service: RateService; store: RateStore };
   /** AML/sanctions screening. Present when screening is enabled. */
   screening?: { service: ScreeningService };
+  /** Mobile airtime recharge (DingConnect). Present when a key is configured. */
+  airtime?: { service: AirtimeService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -73,6 +77,9 @@ export function defaultDeps(): ServerDeps {
   };
   if (config.screening.enabled) {
     deps.screening = { service: new ScreeningService(DEFAULT_SANCTIONS, createScreeningStore(), config.screening.threshold) };
+  }
+  if (config.dingconnect.enabled) {
+    deps.airtime = { service: new AirtimeService(new DingConnectAdapter(config.dingconnect), ledger) };
   }
   return deps;
 }

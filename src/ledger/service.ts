@@ -133,6 +133,27 @@ export class LedgerService {
     return { fx, debit };
   }
 
+  /** Debit a wallet to pay for mobile airtime (funds leave to the provider). */
+  airtimeTopup(args: {
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    externalRef?: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.airtimeTopup(args));
+  }
+
+  /** Refund an airtime debit when the provider send fails. */
+  reverseAirtime(args: {
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.reverseAirtime(args));
+  }
+
   /** Settle a confirmed outbound payout (funds leave payout_suspense to recipient). */
   settlePayout(args: {
     currency: Currency;

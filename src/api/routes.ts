@@ -166,6 +166,22 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // ---- mobile airtime recharge (DingConnect) ------------------------------
+  if (deps.airtime) {
+    const air = deps.airtime.service;
+    app.get('/airtime/balance', async () => air.balance());
+    app.get('/airtime/products', async (req) => {
+      const q = z.object({ country: z.string().length(2) }).parse(req.query);
+      return air.products(q.country.toUpperCase());
+    });
+    // Debit the customer wallet and send airtime; refunds the wallet if the send fails.
+    app.post('/airtime/topup', async (req) => {
+      const b = z.object({ customerId: z.string(), accountNumber: z.string().min(5), skuCode: z.string().min(1), sendAmount: amountSchema, idempotencyKey: z.string().min(1) }).parse(req.body);
+      await assertActiveCustomer(b.customerId);
+      return air.topup({ customerId: b.customerId, currency: 'BRL', accountNumber: b.accountNumber, skuCode: b.skuCode, amountMinor: money(b.sendAmount, 'BRL'), idempotencyKey: b.idempotencyKey });
+    });
+  }
+
   // ---- money-in (Lytex: PIX + card) ---------------------------------------
   // Registered only when a payment gateway is configured (LYTEX_CLIENT_ID set).
   if (deps.payments) {

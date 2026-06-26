@@ -47,4 +47,10 @@ export const config = {
     enabled: (process.env.SCREENING ?? 'on') !== 'off',
     threshold: Number(process.env.SCREENING_THRESHOLD ?? 0.85),
   },
+  /** DingConnect mobile-airtime recharge. Enabled when an API key is present. */
+  dingconnect: {
+    enabled: !!process.env.DINGCONNECT_API_KEY,
+    base: process.env.DINGCONNECT_BASE ?? 'https://api.dingconnect.com/api/V1',
+    apiKey: process.env.DINGCONNECT_API_KEY ?? '',
+  },
 } as const;

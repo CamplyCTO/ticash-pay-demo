@@ -279,6 +279,47 @@ export function reverseTransfer(args: {
   return [fxJournal, debitJournal];
 }
 
+/**
+ * Mobile airtime top-up: the customer's wallet pays for airtime sent to a phone via
+ * a provider (DingConnect). Funds leave the wallet to the external world (settlement).
+ */
+export function airtimeTopup(args: {
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  externalRef?: string;
+}): JournalDraft {
+  const { customerId, currency, amountMinor } = args;
+  return {
+    type: 'airtime',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.externalRef ? { externalRef: args.externalRef } : {}),
+    postings: [
+      debit(customerWallet(customerId, currency), amountMinor),
+      credit(systemAccount('settlement', currency), amountMinor),
+    ],
+  };
+}
+
+/** Reverse an airtime debit (refund the wallet) when the provider send fails. */
+export function reverseAirtime(args: {
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+}): JournalDraft {
+  const { customerId, currency, amountMinor } = args;
+  return {
+    type: 'reversal',
+    idempotencyKey: args.idempotencyKey,
+    postings: [
+      debit(systemAccount('settlement', currency), amountMinor),
+      credit(customerWallet(customerId, currency), amountMinor),
+    ],
+  };
+}
+
 /** Settle a confirmed outbound payout: funds leave the system to the recipient. */
 export function settlePayout(args: {
   currency: Currency;
