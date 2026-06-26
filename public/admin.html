@@ -246,6 +246,7 @@ const FORMS = {
   'Reverter pagamento (manual)': { fields:[['correlationId','correlationId do payout']], run:(v)=>api('POST',`/payouts/${v.correlationId}/fail`,{}) },
   'Bloquear/ativar agente': { fields:[['externalId','agente'],['status','active ou blocked']], run:(v)=>api('POST',`/agents/${v.externalId}/status`,{status:v.status}) },
   'Bloquear/ativar cliente': { fields:[['externalId','cliente'],['status','active ou blocked']], run:(v)=>api('POST',`/customers/${v.externalId}/status`,{status:v.status}) },
+  'Verificar sanções (AML)': { fields:[['name','nome completo']], run: async (v)=>{ const r = await api('POST','/screening/check',{name:v.name}); if (r.hit) window.alert('⚠️ SANÇÃO ENCONTRADA:\n'+r.matches.map(m=>`${m.matchedName} (${m.list}${m.program?' / '+m.program:''}) — ${(m.score*100).toFixed(0)}%`).join('\n')); else toast('✓ Sem correspondência (limpo)'); return r; } },
 };
 let activeForm = Object.keys(FORMS)[0];
 function renderTabs() {

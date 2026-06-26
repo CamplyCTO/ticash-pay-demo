@@ -42,4 +42,9 @@ export const config = {
     defaultPlatformFeeBps: Number(process.env.FX_PLATFORM_FEE_BPS ?? 0),
     defaultProviderFeeBps: Number(process.env.FX_PROVIDER_FEE_BPS ?? 335), // BenCash ~3.35%
   },
+  /** AML/sanctions screening. On by default; threshold is the 0..1 match cutoff. */
+  screening: {
+    enabled: (process.env.SCREENING ?? 'on') !== 'off',
+    threshold: Number(process.env.SCREENING_THRESHOLD ?? 0.85),
+  },
 } as const;

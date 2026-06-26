@@ -9,12 +9,15 @@ import {
   createProviderEventStore,
   createRateStore,
   createRegistry,
+  createScreeningStore,
   createStore,
   createTransferStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
 import { RateStore } from '../fx/types';
+import { ScreeningService } from '../screening/screening-service';
+import { DEFAULT_SANCTIONS } from '../screening/sanctions-list';
 import { LedgerService } from '../ledger/service';
 import { RegistryStore } from '../registry/store';
 import { seedDemo } from '../demo/seed';
@@ -39,6 +42,8 @@ export interface ServerDeps {
   transfers?: { service: TransferService };
   /** FX rate service (mid + margin -> locked customer rate). Always wired by defaultDeps. */
   fx?: { service: RateService; store: RateStore };
+  /** AML/sanctions screening. Present when screening is enabled. */
+  screening?: { service: ScreeningService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -66,6 +71,9 @@ export function defaultDeps(): ServerDeps {
   deps.transfers = {
     service: new TransferService(ledger, createTransferStore(), deps.payouts.service, rateService),
   };
+  if (config.screening.enabled) {
+    deps.screening = { service: new ScreeningService(DEFAULT_SANCTIONS, createScreeningStore(), config.screening.threshold) };
+  }
   return deps;
 }
 

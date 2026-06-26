@@ -8,6 +8,7 @@ import { PgProviderEventStore } from '../dist/payments/event-store.js';
 import { PgPayoutStore } from '../dist/payouts/pg-payout-store.js';
 import { PgTransferStore } from '../dist/transfers/pg-transfer-store.js';
 import { PgRateStore } from '../dist/fx/pg-rate-store.js';
+import { PgScreeningStore } from '../dist/screening/pg-hit-store.js';
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -71,6 +72,13 @@ try {
   ok(f2 && f2.toCurrency === 'USD' && f2.platformFeeBps === 50, 'fx rate get (currencies trimmed, fees)');
   const f3 = await rates.set({ fromCurrency: 'MXN', toCurrency: 'USD', midRate: '0.060', marginBps: 50, platformFeeBps: 75, providerFeeBps: 335, source: 'manual' });
   ok(f3.marginBps === 50 && f3.platformFeeBps === 75 && f3.providerFeeBps === 335, 'fx rate upsert (margin + fees)');
+
+  // --- sanctions hits ---
+  const screening = new PgScreeningStore(pool);
+  await screening.record({ subject: 'verify-' + ID, context: 'manual', list: 'TEST', matchedName: 'Blocked Testperson', score: 1 });
+  const hits = await screening.list(50);
+  const mine = hits.find((h) => h.subject === 'verify-' + ID);
+  ok(mine && mine.list === 'TEST' && mine.score === 1 && mine.context === 'manual', 'sanctions hit recorded + listed');
 } finally {
   // cleanup test rows (these tables are separate from the ledger)
   await pool.query('DELETE FROM payment_intents WHERE provider_id = $1', [ID]);
@@ -78,6 +86,7 @@ try {
   await pool.query('DELETE FROM payouts WHERE correlation_id = $1', [ID]);
   await pool.query('DELETE FROM transfers WHERE correlation_id = $1', [ID]);
   await pool.query("DELETE FROM fx_rates WHERE from_currency = 'MXN ' AND to_currency = 'USD '");
+  await pool.query('DELETE FROM sanctions_hits WHERE subject = $1', ['verify-' + ID]);
   await pool.end();
 }
 console.log(failures === 0 ? '\nALL PG STORE CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);

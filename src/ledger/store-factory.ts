@@ -20,6 +20,9 @@ import { PgTransferStore } from '../transfers/pg-transfer-store';
 import { InMemoryRateStore } from '../fx/rate-store';
 import { PgRateStore } from '../fx/pg-rate-store';
 import { RateStore } from '../fx/types';
+import { InMemoryScreeningStore } from '../screening/hit-store';
+import { PgScreeningStore } from '../screening/pg-hit-store';
+import { ScreeningStore } from '../screening/types';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -49,4 +52,8 @@ export function createRateStore(): RateStore {
   return config.useInMemory
     ? new InMemoryRateStore({ marginBps: config.fx.defaultMarginBps, platformFeeBps: config.fx.defaultPlatformFeeBps, providerFeeBps: config.fx.defaultProviderFeeBps })
     : new PgRateStore(getPool());
+}
+
+export function createScreeningStore(): ScreeningStore {
+  return config.useInMemory ? new InMemoryScreeningStore() : new PgScreeningStore(getPool());
 }

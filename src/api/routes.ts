@@ -95,6 +95,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   app.post('/transactions/transfer', async (req) => {
     const b = z.object({ senderId: z.string(), recipientRef: z.string(), fromCurrency: currencySchema, toCurrency: currencySchema, sendAmount: amountSchema, feeAmount: amountSchema.optional(), rate: z.string().optional(), idempotencyKey: z.string().min(1) }).parse(req.body);
     await assertActiveCustomer(b.senderId);
+    if (deps.screening) await deps.screening.service.assertClear(b.recipientRef, 'transfer');
     // `rate` and `feeAmount` are optional: when omitted, the corridor config supplies
     // the locked rate (FX margin) and the platform fee (WS-6/WS-7).
     const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), ...(b.feeAmount !== undefined ? { feeMinor: money(b.feeAmount, b.fromCurrency) } : {}), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
@@ -151,6 +152,20 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // ---- AML / sanctions screening ------------------------------------------
+  if (deps.screening) {
+    const scr = deps.screening.service;
+    // Ad-hoc check (e.g. KYC onboarding) — returns the result; a hit is recorded.
+    app.post('/screening/check', async (req) => {
+      const b = z.object({ name: z.string().min(1) }).parse(req.body);
+      return scr.screen(b.name, 'manual');
+    });
+    app.get('/screening/hits', async (req) => {
+      const q = z.object({ limit: z.coerce.number().int().positive().max(500).optional() }).parse(req.query);
+      return scr.hits(q.limit);
+    });
+  }
+
   // ---- money-in (Lytex: PIX + card) ---------------------------------------
   // Registered only when a payment gateway is configured (LYTEX_CLIENT_ID set).
   if (deps.payments) {
@@ -175,6 +190,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         .parse(req.body);
 
       await assertActiveCustomer(b.customerId);
+      if (deps.screening) await deps.screening.service.assertClear(b.payer.name, 'charge');
       const amountMinor = money(b.amount, 'BRL');
       const reference = b.reference ?? `chg-${b.customerId}-${amountMinor}`;
       const result = await gateway.createCharge({
