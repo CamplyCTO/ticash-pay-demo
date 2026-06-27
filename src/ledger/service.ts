@@ -134,22 +134,24 @@ export class LedgerService {
     return { fx, debit };
   }
 
-  /** Debit a wallet to pay for mobile airtime (funds leave to the provider). */
+  /** Debit a wallet for airtime: cost leaves to the provider, margin is platform revenue. */
   airtimeTopup(args: {
     customerId: string;
     currency: Currency;
-    amountMinor: bigint;
+    costMinor: bigint;
+    marginMinor: bigint;
     idempotencyKey: string;
     externalRef?: string;
   }): Promise<PostedJournal> {
     return this.store.post(ops.airtimeTopup(args));
   }
 
-  /** Refund an airtime debit when the provider send fails. */
+  /** Refund an airtime debit (retail) when the provider send fails. */
   reverseAirtime(args: {
     customerId: string;
     currency: Currency;
-    amountMinor: bigint;
+    costMinor: bigint;
+    marginMinor: bigint;
     idempotencyKey: string;
   }): Promise<PostedJournal> {
     return this.store.post(ops.reverseAirtime(args));

@@ -179,19 +179,28 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
-  // ---- mobile airtime recharge (DingConnect) ------------------------------
+  // ---- mobile airtime recharge (DingConnect) — ANY country, per-country margin ----
   if (deps.airtime) {
     const air = deps.airtime.service;
+    const bps = z.number().int().min(0).max(9999);
     app.get('/airtime/balance', async () => air.balance());
+    // Products for any country, priced with the platform margin (retail the customer pays).
     app.get('/airtime/products', async (req) => {
       const q = z.object({ country: z.string().length(2) }).parse(req.query);
       return air.products(q.country.toUpperCase());
     });
-    // Debit the customer wallet and send airtime; refunds the wallet if the send fails.
+    // Per-country recharge fees (margin bps). List + set.
+    app.get('/airtime/margins', async () => air.listMargins());
+    app.post('/airtime/margins', async (req, reply) => {
+      const b = z.object({ country: z.string().length(2), marginBps: bps }).parse(req.body);
+      reply.status(201);
+      return air.setMargin(b.country.toUpperCase(), b.marginBps);
+    });
+    // Debit the wallet RETAIL (cost + margin), send airtime at cost; refunds if the send fails.
     app.post('/airtime/topup', async (req) => {
-      const b = z.object({ customerId: z.string(), accountNumber: z.string().min(5), skuCode: z.string().min(1), sendAmount: amountSchema, idempotencyKey: z.string().min(1) }).parse(req.body);
+      const b = z.object({ customerId: z.string(), country: z.string().length(2), accountNumber: z.string().min(5), skuCode: z.string().min(1), cost: amountSchema, idempotencyKey: z.string().min(1) }).parse(req.body);
       await assertActiveCustomer(b.customerId);
-      return air.topup({ customerId: b.customerId, currency: 'BRL', accountNumber: b.accountNumber, skuCode: b.skuCode, amountMinor: money(b.sendAmount, 'BRL'), idempotencyKey: b.idempotencyKey });
+      return air.topup({ customerId: b.customerId, currency: 'BRL', countryIso: b.country.toUpperCase(), accountNumber: b.accountNumber, skuCode: b.skuCode, costMinor: money(b.cost, 'BRL'), idempotencyKey: b.idempotencyKey });
     });
   }
 

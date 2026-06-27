@@ -10,6 +10,7 @@ import {
   createRateStore,
   createRegistry,
   createScreeningStore,
+  createAirtimeMarginStore,
   createStore,
   createTransferStore,
 } from '../ledger/store-factory';
@@ -89,7 +90,7 @@ export function defaultDeps(): ServerDeps {
     deps.screening = { service: new ScreeningService(DEFAULT_SANCTIONS, createScreeningStore(), config.screening.threshold) };
   }
   if (config.dingconnect.enabled) {
-    deps.airtime = { service: new AirtimeService(new DingConnectAdapter(config.dingconnect), ledger) };
+    deps.airtime = { service: new AirtimeService(new DingConnectAdapter(config.dingconnect), ledger, createAirtimeMarginStore()) };
   }
   // KYC limits are always enforced; the Sumsub verification service is added when configured.
   const kycLimits = new KycLimits(deps.registry, config.kyc.limitByLevel);

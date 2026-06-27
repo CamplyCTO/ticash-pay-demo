@@ -280,43 +280,53 @@ export function reverseTransfer(args: {
 }
 
 /**
- * Mobile airtime top-up: the customer's wallet pays for airtime sent to a phone via
- * a provider (DingConnect). Funds leave the wallet to the external world (settlement).
+ * Mobile airtime top-up: the customer pays the provider cost PLUS the platform's
+ * margin. The wallet is debited the retail (cost + margin); the cost leaves to the
+ * provider (settlement) and the margin is the platform's revenue (fee_revenue).
+ *   retail = cost + margin   ⇒  journal nets to 0.  No margin ⇒ a single settlement leg.
  */
 export function airtimeTopup(args: {
   customerId: string;
   currency: Currency;
-  amountMinor: bigint;
+  costMinor: bigint;
+  marginMinor: bigint;
   idempotencyKey: string;
   externalRef?: string;
 }): JournalDraft {
-  const { customerId, currency, amountMinor } = args;
+  const { customerId, currency, costMinor, marginMinor } = args;
+  const retail = costMinor + marginMinor;
+  const postings: PostingDraft[] = [
+    debit(customerWallet(customerId, currency), retail),
+    credit(systemAccount('settlement', currency), costMinor),
+  ];
+  if (marginMinor > 0n) postings.push(credit(systemAccount('fee_revenue', currency), marginMinor));
   return {
     type: 'airtime',
     idempotencyKey: args.idempotencyKey,
     ...(args.externalRef ? { externalRef: args.externalRef } : {}),
-    postings: [
-      debit(customerWallet(customerId, currency), amountMinor),
-      credit(systemAccount('settlement', currency), amountMinor),
-    ],
+    postings,
   };
 }
 
-/** Reverse an airtime debit (refund the wallet) when the provider send fails. */
+/** Reverse an airtime debit (refund retail, unwind cost + margin) when the send fails. */
 export function reverseAirtime(args: {
   customerId: string;
   currency: Currency;
-  amountMinor: bigint;
+  costMinor: bigint;
+  marginMinor: bigint;
   idempotencyKey: string;
 }): JournalDraft {
-  const { customerId, currency, amountMinor } = args;
+  const { customerId, currency, costMinor, marginMinor } = args;
+  const retail = costMinor + marginMinor;
+  const postings: PostingDraft[] = [
+    debit(systemAccount('settlement', currency), costMinor),
+    credit(customerWallet(customerId, currency), retail),
+  ];
+  if (marginMinor > 0n) postings.push(debit(systemAccount('fee_revenue', currency), marginMinor));
   return {
     type: 'reversal',
     idempotencyKey: args.idempotencyKey,
-    postings: [
-      debit(systemAccount('settlement', currency), amountMinor),
-      credit(customerWallet(customerId, currency), amountMinor),
-    ],
+    postings,
   };
 }
 

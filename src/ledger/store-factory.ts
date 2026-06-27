@@ -23,6 +23,8 @@ import { RateStore } from '../fx/types';
 import { InMemoryScreeningStore } from '../screening/hit-store';
 import { PgScreeningStore } from '../screening/pg-hit-store';
 import { ScreeningStore } from '../screening/types';
+import { AirtimeMarginStore, InMemoryAirtimeMarginStore } from '../airtime/margin-store';
+import { PgAirtimeMarginStore } from '../airtime/pg-margin-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -56,4 +58,9 @@ export function createRateStore(): RateStore {
 
 export function createScreeningStore(): ScreeningStore {
   return config.useInMemory ? new InMemoryScreeningStore() : new PgScreeningStore(getPool());
+}
+
+export function createAirtimeMarginStore(): AirtimeMarginStore {
+  const def = config.dingconnect.defaultMarginBps;
+  return config.useInMemory ? new InMemoryAirtimeMarginStore(def) : new PgAirtimeMarginStore(getPool(), def);
 }

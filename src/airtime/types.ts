@@ -9,10 +9,16 @@ import { HttpClient } from '../payments/types';
 export interface AirtimeProduct {
   skuCode: string;
   providerCode: string;
-  sendValue: number; // cost in the account currency
+  sendValue: number; // provider cost in the account currency
   sendCurrency: string;
   receiveValue: number; // airtime delivered
   receiveCurrency: string;
+}
+
+/** A product enriched with the platform's margin and the retail price the customer pays. */
+export interface PricedAirtimeProduct extends AirtimeProduct {
+  marginBps: number;
+  retailValue: number; // sendValue (cost) + margin, in the account currency
 }
 
 export interface AirtimeSendRequest {

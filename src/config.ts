@@ -52,6 +52,8 @@ export const config = {
     enabled: !!process.env.DINGCONNECT_API_KEY,
     base: process.env.DINGCONNECT_BASE ?? 'https://api.dingconnect.com/api/V1',
     apiKey: process.env.DINGCONNECT_API_KEY ?? '',
+    // Default airtime margin (bps) applied to the provider cost (per-country override in DB).
+    defaultMarginBps: Number(process.env.AIRTIME_MARGIN_BPS ?? 0),
   },
   /** Sumsub KYC. Enabled when an app token is present. */
   sumsub: {

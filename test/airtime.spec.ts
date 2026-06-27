@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DingConnectAdapter, DingConfig } from '../src/airtime/dingconnect-adapter';
 import { AirtimeService } from '../src/airtime/airtime-service';
 import { AirtimePort } from '../src/airtime/types';
+import { InMemoryAirtimeMarginStore } from '../src/airtime/margin-store';
 import { HttpClient } from '../src/payments/types';
 import { InMemoryLedgerStore } from '../src/ledger/in-memory-store';
 import { LedgerService } from '../src/ledger/service';
@@ -49,43 +50,69 @@ describe('DingConnectAdapter', () => {
 class FakePort implements AirtimePort {
   readonly name = 'dingconnect';
   sent = 0;
-  constructor(private readonly ok = true) {}
+  constructor(private readonly ok = true, private readonly catalog: any[] = []) {}
   async balance() { return { amount: 0, currency: 'BRL' }; }
-  async products() { return []; }
+  async products() { return this.catalog; }
   async send() { this.sent++; if (!this.ok) throw new Error('provider send failed'); return { providerRef: 'T-1', raw: {} }; }
 }
 const wallet = (id: string): AccountSpec => ({ ownerType: 'customer', ownerId: id, kind: 'wallet', currency: 'BRL' });
+const sys = (kind: string): AccountSpec => ({ ownerType: 'system', ownerId: null, kind: kind as any, currency: 'BRL' });
+const margins = (def = 0) => new InMemoryAirtimeMarginStore(def);
 
-describe('AirtimeService — debit, send, refund-on-fail', () => {
+describe('AirtimeService — margin, debit, send, refund-on-fail', () => {
   async function funded(amount: bigint) {
     const ledger = new LedgerService(new InMemoryLedgerStore());
     await ledger.fundWallet({ customerId: 'jean', currency: 'BRL', amountMinor: amount, idempotencyKey: 'f' });
     return ledger;
   }
-  const args = { customerId: 'jean', currency: 'BRL' as const, accountNumber: '50912345678', skuCode: '4RHT10700', amountMinor: 6428n, idempotencyKey: 'air-1' };
+  const args = { customerId: 'jean', currency: 'BRL' as const, countryIso: 'HT', accountNumber: '50912345678', skuCode: '4RHT10700', costMinor: 6428n, idempotencyKey: 'air-1' };
 
-  it('debits the wallet and sends', async () => {
+  it('no margin: debits cost only, sends', async () => {
     const ledger = await funded(10000n);
-    const port = new FakePort(true);
-    const r = await new AirtimeService(port, ledger).topup(args);
+    const r = await new AirtimeService(new FakePort(true), ledger, margins(0)).topup(args);
     expect(r.providerRef).toBe('T-1');
-    expect(await ledger.getBalance(wallet('jean'))).toBe(3572n); // 100.00 - 64.28
+    expect(await ledger.getBalance(wallet('jean'))).toBe(3572n); // 100.00 - 64.28 cost
+    expect(await ledger.getBalance(sys('fee_revenue'))).toBe(0n);
     expect((await ledger.reconcile()).balanced).toBe(true);
   });
 
-  it('rejects when the wallet has insufficient funds (no send attempted)', async () => {
-    const ledger = await funded(1000n); // only R$10
-    const port = new FakePort(true);
-    await expect(new AirtimeService(port, ledger).topup(args)).rejects.toMatchObject({ code: 'INSUFFICIENT_FUNDS' });
-    expect(port.sent).toBe(0);
-    expect(await ledger.getBalance(wallet('jean'))).toBe(1000n); // untouched
-  });
-
-  it('refunds the wallet when the provider send fails', async () => {
+  it('with a 5% margin: debits RETAIL, cost->settlement, margin->fee_revenue', async () => {
     const ledger = await funded(10000n);
-    const port = new FakePort(false); // send throws
-    await expect(new AirtimeService(port, ledger).topup(args)).rejects.toThrow(/send failed/);
-    expect(await ledger.getBalance(wallet('jean'))).toBe(10000n); // refunded
+    const m = margins(500); // 5%
+    const r = await new AirtimeService(new FakePort(true), ledger, m).topup(args);
+    // margin = round(6428 * 5%) = 321 ; retail = 6749
+    expect(r).toMatchObject({ costMinor: 6428n, marginMinor: 321n, retailMinor: 6749n });
+    expect(await ledger.getBalance(wallet('jean'))).toBe(10000n - 6749n); // debited RETAIL
+    expect(await ledger.getBalance(sys('fee_revenue'))).toBe(321n); // platform profit = margin
+    // settlement nets fundWallet(-10000) + airtime cost(+6428); the journal itself is balanced:
     expect((await ledger.reconcile()).balanced).toBe(true);
+  });
+
+  it('rejects when the wallet cannot cover the retail (no send attempted)', async () => {
+    const ledger = await funded(6500n); // covers cost but not cost+margin(5%)
+    const port = new FakePort(true);
+    await expect(new AirtimeService(port, ledger, margins(500)).topup(args)).rejects.toMatchObject({ code: 'INSUFFICIENT_FUNDS' });
+    expect(port.sent).toBe(0);
+    expect(await ledger.getBalance(wallet('jean'))).toBe(6500n); // untouched
+  });
+
+  it('refunds RETAIL and unwinds the margin when the provider send fails', async () => {
+    const ledger = await funded(10000n);
+    await expect(new AirtimeService(new FakePort(false), ledger, margins(500)).topup(args)).rejects.toThrow(/send failed/);
+    expect(await ledger.getBalance(wallet('jean'))).toBe(10000n); // fully refunded
+    expect(await ledger.getBalance(sys('fee_revenue'))).toBe(0n); // margin unwound
+    expect((await ledger.reconcile()).balanced).toBe(true);
+  });
+
+  it('prices products for ANY country with the per-country margin', async () => {
+    const ledger = await funded(1n);
+    const catalog = [{ skuCode: 'S1', providerCode: 'P', sendValue: 100, sendCurrency: 'BRL', receiveValue: 10, receiveCurrency: 'USD' }];
+    const m = margins(0);
+    await m.set('BR', 1000); // 10% for Brazil
+    const svc = new AirtimeService(new FakePort(true, catalog), ledger, m);
+    const br = await svc.products('BR');
+    expect(br[0]).toMatchObject({ skuCode: 'S1', marginBps: 1000, retailValue: 110 }); // 100 + 10%
+    const ht = await svc.products('HT'); // no override -> default 0
+    expect(ht[0]).toMatchObject({ marginBps: 0, retailValue: 100 });
   });
 });
