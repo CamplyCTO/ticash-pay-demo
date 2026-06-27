@@ -40,7 +40,7 @@ export const config = {
   fx: {
     defaultMarginBps: Number(process.env.FX_MARGIN_BPS ?? 200),
     defaultPlatformFeeBps: Number(process.env.FX_PLATFORM_FEE_BPS ?? 0),
-    defaultProviderFeeBps: Number(process.env.FX_PROVIDER_FEE_BPS ?? 335), // BenCash ~3.35%
+    defaultProviderFeeBps: Number(process.env.FX_PROVIDER_FEE_BPS ?? 500), // BenCash 5% (confirmed live: 200 HTG sent -> 190 received)
   },
   /** AML/sanctions screening. On by default; threshold is the 0..1 match cutoff. */
   screening: {

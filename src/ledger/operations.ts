@@ -332,7 +332,7 @@ export function reverseAirtime(args: {
 
 /**
  * Settle a confirmed outbound payout: funds leave payout_suspense. When the payout
- * rail charges a fee (e.g. BenCash ~3.35%), split the gross so the books reflect the
+ * rail charges a fee (e.g. BenCash 5%), split the gross so the books reflect the
  * REAL money flow — `settlement` gets the net delivered to the recipient and
  * `provider_fee` gets the rail's cut (a distinct, reconcilable cost). With no fee it
  * collapses to the original single settlement posting.

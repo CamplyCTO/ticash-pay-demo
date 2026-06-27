@@ -29,7 +29,7 @@ const key = (f: Currency, t: Currency) => `${f}:${t}`;
 export class InMemoryRateStore implements RateStore {
   private readonly rates = new Map<string, RateRecord>();
   constructor(
-    seed: RateDefaults = { marginBps: 200, platformFeeBps: 0, providerFeeBps: 335 },
+    seed: RateDefaults = { marginBps: 200, platformFeeBps: 0, providerFeeBps: 500 },
     private readonly clock: () => string = () => new Date(Date.UTC(2026, 0, 1)).toISOString(),
   ) {
     for (const r of DEFAULT_MID_RATES) {

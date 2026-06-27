@@ -4,7 +4,7 @@ import { Currency } from '../money/currency';
  * FX rate + fee model. Per corridor we store a MID rate and three bps knobs:
  *   - marginBps      : platform FX spread (mid vs customer rate) — platform revenue
  *   - platformFeeBps : platform transfer fee (% of send)         — platform revenue
- *   - providerFeeBps : the payout rail's cut (e.g. BenCash 3.35%) — a COST
+ *   - providerFeeBps : the payout rail's cut (BenCash 5%, confirmed live) — a COST
  * The customer rate is the mid moved against the customer by the margin, computed
  * with exact decimal math (no floating point), and LOCKED onto each transfer.
  */
