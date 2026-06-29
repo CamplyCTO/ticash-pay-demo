@@ -13,6 +13,10 @@ code(){ curl -s -o /dev/null -w "%{http_code}" -H content-type:application/json 
 jget(){ curl -s "$B$1"; }
 jpost(){ curl -s -H content-type:application/json -X POST "$B$2" -d "$3"; }
 field(){ node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{console.log(JSON.parse(d)$1)}catch(e){console.log('PARSE_ERR')}})"; }
+auth(){ curl -s -H content-type:application/json "$@"; }
+# OTP codes are emitted by the ConsoleOtpSender to the server log; read the latest for a phone.
+LOG="${LOG:-}"
+otp_for(){ grep -aF "[otp] $1 ->" "$LOG" | tail -1 | grep -oE '> [0-9]{6}' | grep -oE '[0-9]{6}'; }
 
 echo "== A. health =="
 check "health ok" '{"status":"ok"}' "$(jget /health)"
@@ -67,6 +71,51 @@ check "Σ USDT = 0" 0 "$(echo "$R" | field '.perCurrencyTotals.USDT')"
 
 echo "== H. admin panel served =="
 check "GET /admin -> 200" 200 "$(code "$B/admin")"
+
+if [ -n "$LOG" ]; then
+echo "== I. WS-0 end-user auth (/app: phone+OTP -> JWT) =="
+check "GET /app/me no token -> 401"  401 "$(code "$B/app/me")"
+check "GET /app/me bad token -> 401" 401 "$(code -H 'authorization: Bearer bad.token.sig' "$B/app/me")"
+PH1="+5511900001111"
+check "register customer (self-signup) -> 201" 201 "$(code -X POST "$B/app/auth/register" -d "{\"phone\":\"$PH1\"}")"
+C1=$(otp_for "$PH1")
+V1=$(jpost x /app/auth/verify "{\"phone\":\"$PH1\",\"code\":\"$C1\"}")
+AT1=$(echo "$V1" | field '.accessToken'); RT1=$(echo "$V1" | field '.refreshToken'); EXT1=$(echo "$V1" | field '.user.externalId')
+check "verify issues an access token" true "$([ -n "$AT1" ] && [ "$AT1" != undefined ] && echo true || echo false)"
+check "self-signup created a customers row" "$EXT1" "$(jget /customers | field ".find(c=>c.externalId=='$EXT1').externalId")"
+check "GET /app/me with token -> 200" 200 "$(code -H "authorization: Bearer $AT1" "$B/app/me")"
+check "/app/me role = customer" customer "$(auth -H "authorization: Bearer $AT1" "$B/app/me" | field '.user.role')"
+check "/app/me scoped to own externalId" "$EXT1" "$(auth -H "authorization: Bearer $AT1" "$B/app/me" | field '.user.externalId')"
+# admin funds the app customer; the app then sees its own balance (signup -> fund -> visible)
+check "fund app-customer 100 BRL -> 200" 200 "$(code -X POST "$B/transactions/fund-wallet" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"100.00\",\"idempotencyKey\":\"app-fund-$EXT1\"}")"
+check "/app/me shows wallet 10000 BRL" 10000 "$(auth -H "authorization: Bearer $AT1" "$B/app/me" | field ".wallets.find(w=>w.currency=='BRL').balanceMinor")"
+# refresh rotation is reuse-safe
+RR=$(jpost x /app/auth/refresh "{\"refreshToken\":\"$RT1\"}"); RT2=$(echo "$RR" | field '.refreshToken')
+check "refresh returns a NEW refresh token" true "$([ -n "$RT2" ] && [ "$RT2" != "$RT1" ] && [ "$RT2" != undefined ] && echo true || echo false)"
+check "reusing the OLD refresh token -> 401" 401 "$(code -X POST "$B/app/auth/refresh" -d "{\"refreshToken\":\"$RT1\"}")"
+check "duplicate phone signup -> 409" 409 "$(code -X POST "$B/app/auth/register" -d "{\"phone\":\"$PH1\"}")"
+# a second signup is a distinct, isolated party
+PH2="+5511900002222"
+code -X POST "$B/app/auth/register" -d "{\"phone\":\"$PH2\"}" >/dev/null
+EXT2=$(jpost x /app/auth/verify "{\"phone\":\"$PH2\",\"code\":\"$(otp_for "$PH2")\"}" | field '.user.externalId')
+check "two signups get distinct externalIds" true "$([ -n "$EXT2" ] && [ "$EXT1" != "$EXT2" ] && echo true || echo false)"
+
+echo "== J. WS-0 agent app login (admin-provisioned) + OTP rate limit =="
+APH="+5511900003333"
+check "admin provisions agent pedro login -> 201" 201 "$(code -X POST "$B/agents/pedro/app-login" -d "{\"phone\":\"$APH\"}")"
+check "request OTP for agent -> 200" 200 "$(code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$APH\"}")"
+AV=$(jpost x /app/auth/verify "{\"phone\":\"$APH\",\"code\":\"$(otp_for "$APH")\"}")
+AAT=$(echo "$AV" | field '.accessToken'); ART=$(echo "$AV" | field '.refreshToken')
+check "agent /app/me role = agent" agent "$(auth -H "authorization: Bearer $AAT" "$B/app/me" | field '.user.role')"
+check "agent /app/me scoped to pedro" pedro "$(auth -H "authorization: Bearer $AAT" "$B/app/me" | field '.user.externalId')"
+check "agent logout -> 200" 200 "$(code -X POST "$B/app/auth/logout" -d "{\"refreshToken\":\"$ART\"}")"
+check "refresh after logout -> 401" 401 "$(code -X POST "$B/app/auth/refresh" -d "{\"refreshToken\":\"$ART\"}")"
+# OTP brute-force is rate-limited (default 5/hour); hammer until it trips
+for i in 1 2 3 4 5; do code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$PH2\"}" >/dev/null; done
+check "OTP rate limit -> 429" 429 "$(code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$PH2\"}")"
+else
+echo "== I/J. SKIPPED auth section (set LOG=<server log path> to enable OTP capture) =="
+fi
 
 echo ""
 echo "================= RESULT: $PASS passed, $FAIL failed ================="

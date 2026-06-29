@@ -71,4 +71,13 @@ export const config = {
       2: Number(process.env.KYC_LIMIT_L2 ?? 50000),
     } as Record<number, number>,
   },
+  /** End-user auth for the mobile apps (Phase 3 WS-0). Always on; OTP sender is pluggable. */
+  auth: {
+    jwtSecret: process.env.AUTH_JWT_SECRET ?? 'dev-insecure-secret-change-me',
+    accessTtlSec: Number(process.env.AUTH_ACCESS_TTL_SEC ?? 900), // 15 min
+    refreshTtlSec: Number(process.env.AUTH_REFRESH_TTL_SEC ?? 60 * 60 * 24 * 30), // 30 days
+    otpTtlSec: Number(process.env.AUTH_OTP_TTL_SEC ?? 300), // 5 min
+    otpLength: Number(process.env.AUTH_OTP_LENGTH ?? 6),
+    otpMaxPerHour: Number(process.env.AUTH_OTP_MAX_PER_HOUR ?? 5),
+  },
 } as const;

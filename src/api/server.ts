@@ -13,6 +13,7 @@ import {
   createAirtimeMarginStore,
   createStore,
   createTransferStore,
+  createAuthStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
@@ -36,7 +37,10 @@ import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import { PayoutService } from '../payouts/payout-service';
 import { ProviderFeeReconciliation } from '../payouts/reconciliation';
 import { TransferService } from '../transfers/transfer-service';
+import { AuthService } from '../auth/auth-service';
+import { ConsoleOtpSender } from '../auth/otp-sender';
 import { registerRoutes } from './routes';
+import { registerAppRoutes } from './app-routes';
 
 export interface ServerDeps {
   ledger: LedgerService;
@@ -57,6 +61,8 @@ export interface ServerDeps {
   airtime?: { service: AirtimeService };
   /** KYC: Sumsub verification (when configured) + per-level transaction limits (always on). */
   kyc?: { service?: KycService; limits: KycLimits };
+  /** End-user auth for the mobile apps (phone+OTP -> JWT). Wired by defaultDeps. */
+  auth?: { service: AuthService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -97,6 +103,9 @@ export function defaultDeps(): ServerDeps {
   deps.kyc = config.sumsub.enabled
     ? { limits: kycLimits, service: new KycService(new SumsubAdapter(config.sumsub), deps.registry, config.sumsub.levelName) }
     : { limits: kycLimits };
+  // End-user auth is always available; the OTP sender is pluggable (console for now,
+  // a real SMS gateway once the client picks one — same port pattern as the providers).
+  deps.auth = { service: new AuthService(createAuthStore(), deps.registry, new ConsoleOtpSender(), config.auth) };
   return deps;
 }
 
@@ -109,8 +118,9 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
     const expected = `Basic ${Buffer.from(`${config.basicAuthUser}:${config.basicAuthPass}`).toString('base64')}`;
     app.addHook('onRequest', async (req, reply) => {
       // /health for platform probes; /webhooks/* are authenticated by the
-      // provider's own signature (callback secret), not Basic Auth.
-      if (req.url === '/health' || req.url.startsWith('/webhooks/')) return;
+      // provider's own signature (callback secret); /app/* is the mobile API,
+      // authenticated per-user by JWT (the boundary hook below) — none use Basic Auth.
+      if (req.url === '/health' || req.url.startsWith('/webhooks/') || req.url.startsWith('/app/')) return;
       const provided = req.headers.authorization ?? '';
       if (!constantTimeEqual(provided, expected)) {
         reply
@@ -118,6 +128,24 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
           .status(401)
           .send({ error: 'Unauthorized' });
       }
+    });
+  }
+
+  // Mobile API auth boundary: every /app/* request except the public /app/auth/*
+  // endpoints requires a valid JWT, and is scoped to the caller's own external_id.
+  if (deps.auth) {
+    const authService = deps.auth.service;
+    app.addHook('onRequest', async (req, reply) => {
+      if (!req.url.startsWith('/app/')) return; // only the mobile API
+      if (req.url.startsWith('/app/auth/')) return; // public: register/otp/verify/refresh/logout
+      const header = req.headers.authorization ?? '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+      const claims = token ? authService.verifyAccess(token) : null;
+      if (!claims) {
+        reply.status(401).send({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+        return;
+      }
+      (req as unknown as { appUser: unknown }).appUser = { userId: claims.sub, role: claims.role, externalId: claims.ext };
     });
   }
 
@@ -133,6 +161,8 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
       code === 'FORBIDDEN' ? 403 :
       code === 'LIMIT_EXCEEDED' ? 422 :
       code === 'UNBALANCED' ? 422 :
+      code === 'UNAUTHORIZED' || code === 'INVALID_OTP' || code === 'INVALID_REFRESH' ? 401 :
+      code === 'RATE_LIMITED' ? 429 :
       err.statusCode ?? 400;
     reply.status(status).send({ error: err.name ?? 'Error', code, message: err.message });
   });
@@ -158,6 +188,7 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   });
 
   registerRoutes(app, deps);
+  registerAppRoutes(app, deps);
   return app;
 }
 

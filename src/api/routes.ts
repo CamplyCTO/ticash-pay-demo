@@ -52,6 +52,17 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   });
   app.get('/agents', async () => registry.listAgents());
 
+  // Provision an agent's mobile-app login (admin only; agents do not self-register).
+  // The agent then logs in via /app/auth/otp + /app/auth/verify like any user.
+  if (deps.auth) {
+    app.post('/agents/:externalId/app-login', async (req, reply) => {
+      const p = z.object({ externalId: z.string() }).parse(req.params);
+      const b = z.object({ phone: z.string().min(6).max(20) }).parse(req.body);
+      reply.status(201);
+      return deps.auth!.service.provisionAgentLogin(p.externalId, b.phone);
+    });
+  }
+
   // Block / re-activate parties (admin). A blocked agent/customer cannot transact.
   const statusBody = z.object({ status: z.enum(['active', 'blocked']) });
   app.post('/agents/:externalId/status', async (req) => {
