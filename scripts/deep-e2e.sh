@@ -113,6 +113,26 @@ check "refresh after logout -> 401" 401 "$(code -X POST "$B/app/auth/refresh" -d
 # OTP brute-force is rate-limited (default 5/hour); hammer until it trips
 for i in 1 2 3 4 5; do code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$PH2\"}" >/dev/null; done
 check "OTP rate limit -> 429" 429 "$(code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$PH2\"}")"
+
+echo "== K. WS-2 customer flows (/app: quote -> send -> history, scoped + idempotent) =="
+# EXT1 (customer from section I) was funded 100 BRL; fund a bit more for the send.
+code -X POST "$B/transactions/fund-wallet" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"400.00\",\"idempotencyKey\":\"app-fund2-$EXT1\"}" >/dev/null
+CAUTH="authorization: Bearer $AT1"
+check "GET /app/fx/quote no token -> 401" 401 "$(code "$B/app/fx/quote?from=BRL&to=HTG&amount=200")"
+QT=$(auth -H "$CAUTH" "$B/app/fx/quote?from=BRL&to=HTG&amount=200")
+check "quote: recipient nets > 0 HTG" true "$([ "$(echo "$QT" | field '.netToRecipientMinor')" -gt 0 ] && echo true || echo false)"
+XF=$(auth -H "$CAUTH" -X POST "$B/app/transfers" -d "{\"recipientRef\":\"50912345678\",\"fromCurrency\":\"BRL\",\"toCurrency\":\"HTG\",\"sendAmount\":\"200.00\",\"idempotencyKey\":\"app-send-1\"}")
+CORR1=$(echo "$XF" | field '.correlationId')
+check "POST /app/transfers -> correlationId" true "$([ -n "$CORR1" ] && [ "$CORR1" != undefined ] && echo true || echo false)"
+check "send receiveMinor > 0" true "$([ "$(echo "$XF" | field '.quote.receiveMinor')" -gt 0 ] && echo true || echo false)"
+# idempotent replay: same key -> same correlationId, no second debit
+XF2=$(auth -H "$CAUTH" -X POST "$B/app/transfers" -d "{\"recipientRef\":\"50912345678\",\"fromCurrency\":\"BRL\",\"toCurrency\":\"HTG\",\"sendAmount\":\"200.00\",\"idempotencyKey\":\"app-send-1\"}")
+check "idempotent replay -> same correlationId" "$CORR1" "$(echo "$XF2" | field '.correlationId')"
+check "history shows the transfer" true "$(auth -H "$CAUTH" "$B/app/transactions" | field '.some(r=>r.type=="transfer")')"
+# wallet debited once (~500 funded - 200 send - fee), still > 250 (no double debit)
+BAL=$(auth -H "$CAUTH" "$B/app/me" | field '.wallets.find(w=>w.currency=="BRL").balanceMinor')
+check "wallet debited once (25000 < bal < 50000)" true "$([ "$BAL" -gt 25000 ] && [ "$BAL" -lt 50000 ] && echo true || echo false)"
+check "KYC L0 cap blocks 600 -> 422" 422 "$(code -H "$CAUTH" -X POST "$B/app/transfers" -d "{\"recipientRef\":\"50912345678\",\"fromCurrency\":\"BRL\",\"toCurrency\":\"HTG\",\"sendAmount\":\"600.00\"}")"
 else
 echo "== I/J. SKIPPED auth section (set LOG=<server log path> to enable OTP capture) =="
 fi

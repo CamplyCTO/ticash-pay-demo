@@ -2,7 +2,17 @@ export { API_BASE_URL } from './config';
 export { api } from './client';
 export { secureStorage, STORAGE_KEYS } from './storage';
 export { useAuthStore, type AuthStatus } from './auth-store';
-export { queryClient, useMe } from './query';
+export {
+  queryClient,
+  useMe,
+  useQuote,
+  useTransactions,
+  useKycLimits,
+  useAirtimeProducts,
+  useSendTransfer,
+  useAirtimeTopup,
+  useKycStart,
+} from './query';
 export { AppProviders } from './AppProviders';
 export { useSession } from './useSession';
 export { messageForError } from './errors';

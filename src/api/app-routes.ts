@@ -1,8 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { CURRENCIES, Currency } from '../money/currency';
+import { assertCurrency, CURRENCIES, Currency } from '../money/currency';
+import { toMinor } from '../money/money';
 import { customerWallet, agentFloat } from '../ledger/operations';
+import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
+
+const currencySchema = z.string().transform((v) => assertCurrency(v));
+const amountSchema = z.union([z.string(), z.number()]);
+const money = (amount: string | number, currency: Currency): bigint => toMinor(amount, currency);
 
 /** The authenticated caller, attached by the /app/* JWT boundary (see server.ts). */
 export interface AppUserContext {
@@ -68,6 +75,120 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     const float = await balancesFor(deps, (ccy) => agentFloat(me.externalId, ccy));
     return { user: { id: me.userId, role: me.role, externalId: me.externalId }, agent: agent ? { commissionBps: agent.commissionBps } : null, float };
   });
+
+  // A blocked customer can't transact (mirrors the admin routes).
+  const requireCustomer = async (req: FastifyRequest): Promise<AppUserContext> => {
+    const me = appUserOf(req);
+    if (me.role !== 'customer') throw new RegistryError('this action is for customers', 'FORBIDDEN');
+    const c = await deps.registry.getCustomer(me.externalId);
+    if (c && c.status === 'blocked') throw new RegistryError('account is blocked', 'FORBIDDEN');
+    return me;
+  };
+
+  // ---- FX: corridors + live quote (server-authoritative pricing) ----------
+  if (deps.fx) {
+    const fx = deps.fx.service;
+    app.get('/app/fx/rates', async () => fx.list());
+    // Rate only, or the FULL economics (recipient nets, fees, total to pay) when an amount is given.
+    app.get('/app/fx/quote', async (req) => {
+      const q = z.object({ from: currencySchema, to: currencySchema, amount: amountSchema.optional() }).parse(req.query);
+      if (q.amount === undefined) return fx.quote(q.from, q.to);
+      return fx.priceTransfer(q.from, q.to, money(q.amount, q.from));
+    });
+  }
+
+  // ---- Send: cross-currency transfer, scoped to the caller as sender ------
+  app.post('/app/transfers', async (req, reply) => {
+    const me = await requireCustomer(req);
+    const b = z
+      .object({
+        recipientRef: z.string().min(3),
+        fromCurrency: currencySchema,
+        toCurrency: currencySchema,
+        sendAmount: amountSchema,
+        idempotencyKey: z.string().min(1).optional(),
+      })
+      .parse(req.body);
+    const sendMinor = money(b.sendAmount, b.fromCurrency);
+    // AML on the recipient + KYC tier cap on the sender — same guards as the admin route.
+    if (deps.screening) await deps.screening.service.assertClear(b.recipientRef, 'transfer');
+    if (deps.kyc) await deps.kyc.limits.assertWithinLimit(me.externalId, sendMinor, b.fromCurrency);
+    if (!deps.transfers) throw new RegistryError('transfers are not available', 'VALIDATION');
+    reply.status(201);
+    // senderId is the AUTHENTICATED caller — never taken from the body.
+    return deps.transfers.service.initiate({
+      senderId: me.externalId,
+      recipientRef: b.recipientRef,
+      fromCurrency: b.fromCurrency,
+      toCurrency: b.toCurrency,
+      sendMinor,
+      idempotencyKey: b.idempotencyKey ?? `app-xfer:${me.externalId}:${randomUUID()}`,
+    });
+  });
+
+  // ---- History: the caller's own transactions (across their wallets) ------
+  app.get('/app/transactions', async (req) => {
+    const me = appUserOf(req);
+    const q = z.object({ limit: z.coerce.number().int().positive().max(200).optional() }).parse(req.query);
+    const limit = q.limit ?? 50;
+    const kind = me.role === 'customer' ? 'wallet' : 'agent_float';
+    const perCurrency = await Promise.all(
+      (Object.keys(CURRENCIES) as Currency[]).map((ccy) =>
+        deps.ledger.getFeed({ accountKey: `${me.role}:${me.externalId}:${kind}:${ccy}`, limit }),
+      ),
+    );
+    return perCurrency
+      .flat()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  });
+
+  // ---- KYC: limits (always) + start/sync the Sumsub flow (when configured) -
+  if (deps.kyc) {
+    const { limits, service } = deps.kyc;
+    app.get('/app/kyc/limits', async () => limits.table());
+    if (service) {
+      app.post('/app/kyc/start', async (req) => {
+        const me = await requireCustomer(req);
+        return service.start(me.externalId);
+      });
+      app.post('/app/kyc/sync', async (req) => {
+        const me = await requireCustomer(req);
+        return service.sync(me.externalId);
+      });
+    }
+  }
+
+  // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
+  if (deps.airtime) {
+    const air = deps.airtime.service;
+    app.get('/app/airtime/products', async (req) => {
+      const q = z.object({ country: z.string().length(2) }).parse(req.query);
+      return air.products(q.country.toUpperCase());
+    });
+    app.post('/app/airtime/topup', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z
+        .object({
+          country: z.string().length(2),
+          accountNumber: z.string().min(5),
+          skuCode: z.string().min(1),
+          cost: amountSchema,
+          idempotencyKey: z.string().min(1).optional(),
+        })
+        .parse(req.body);
+      reply.status(201);
+      return air.topup({
+        customerId: me.externalId,
+        currency: 'BRL',
+        countryIso: b.country.toUpperCase(),
+        accountNumber: b.accountNumber,
+        skuCode: b.skuCode,
+        costMinor: money(b.cost, 'BRL'),
+        idempotencyKey: b.idempotencyKey ?? `app-air:${me.externalId}:${randomUUID()}`,
+      });
+    });
+  }
 }
 
 /** Non-zero balances across every supported currency for the given account-spec builder. */

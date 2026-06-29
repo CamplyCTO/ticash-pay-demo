@@ -36,6 +36,24 @@ export const en = {
     title: 'Cashier', cashIn: 'Cash in', cashOut: 'Cash out',
     floatBalance: 'Float balance', commissions: 'Commissions', customers: 'Customers', empty: 'No operations yet',
   },
+  send: {
+    title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient',
+    rate: 'Exchange rate', fee: 'Fee', youPay: 'You pay', recipientGets: 'Recipient gets',
+    enterAmount: 'Enter an amount to see the quote', noRate: 'No rate for this corridor',
+    sent: 'Sent!', toRecipient: 'to {recipient}',
+  },
+  receive: {
+    title: 'Receive', subtitle: 'Share your details to get paid', yourAccount: 'Your account', copied: 'Copied',
+  },
+  topup: {
+    title: 'Top-up', country: 'Country', phone: 'Phone to recharge', product: 'Product',
+    pay: 'Pay', done: 'Recharge sent!', empty: 'No products available', selectCountry: 'Pick a country',
+  },
+  kyc: {
+    title: 'Verification', status: 'Status', limits: 'Transaction limits', start: 'Verify my identity',
+    perTx: 'per transaction', started: 'Verification started', pending: 'Pending', approved: 'Approved',
+    rejected: 'Rejected', review: 'In review',
+  },
 };
 
 // Note: `en` is intentionally NOT `as const` — Dictionary must have `string`
@@ -80,6 +98,24 @@ export const pt: Dictionary = {
     title: 'Caixa', cashIn: 'Depósito', cashOut: 'Saque',
     floatBalance: 'Saldo de caixa', commissions: 'Comissões', customers: 'Clientes', empty: 'Nenhuma operação ainda',
   },
+  send: {
+    title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Destinatário',
+    rate: 'Taxa de câmbio', fee: 'Taxa', youPay: 'Você paga', recipientGets: 'Destinatário recebe',
+    enterAmount: 'Digite um valor para ver a cotação', noRate: 'Sem cotação para este trajeto',
+    sent: 'Enviado!', toRecipient: 'para {recipient}',
+  },
+  receive: {
+    title: 'Receber', subtitle: 'Compartilhe seus dados para receber', yourAccount: 'Sua conta', copied: 'Copiado',
+  },
+  topup: {
+    title: 'Recarga', country: 'País', phone: 'Telefone para recarregar', product: 'Produto',
+    pay: 'Pagar', done: 'Recarga enviada!', empty: 'Nenhum produto disponível', selectCountry: 'Escolha um país',
+  },
+  kyc: {
+    title: 'Verificação', status: 'Status', limits: 'Limites de transação', start: 'Verificar minha identidade',
+    perTx: 'por transação', started: 'Verificação iniciada', pending: 'Pendente', approved: 'Aprovado',
+    rejected: 'Rejeitado', review: 'Em análise',
+  },
 };
 
 export const fr: Dictionary = {
@@ -118,6 +154,24 @@ export const fr: Dictionary = {
   agent: {
     title: 'Caisse', cashIn: 'Dépôt', cashOut: 'Retrait',
     floatBalance: 'Solde de caisse', commissions: 'Commissions', customers: 'Clients', empty: 'Aucune opération' ,
+  },
+  send: {
+    title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Destinataire',
+    rate: 'Taux de change', fee: 'Frais', youPay: 'Vous payez', recipientGets: 'Le destinataire reçoit',
+    enterAmount: 'Saisissez un montant pour voir le devis', noRate: 'Aucun taux pour ce corridor',
+    sent: 'Envoyé !', toRecipient: 'à {recipient}',
+  },
+  receive: {
+    title: 'Recevoir', subtitle: 'Partagez vos coordonnées pour être payé', yourAccount: 'Votre compte', copied: 'Copié',
+  },
+  topup: {
+    title: 'Recharge', country: 'Pays', phone: 'Téléphone à recharger', product: 'Produit',
+    pay: 'Payer', done: 'Recharge envoyée !', empty: 'Aucun produit disponible', selectCountry: 'Choisissez un pays',
+  },
+  kyc: {
+    title: 'Vérification', status: 'Statut', limits: 'Limites de transaction', start: 'Vérifier mon identité',
+    perTx: 'par transaction', started: 'Vérification lancée', pending: 'En attente', approved: 'Approuvé',
+    rejected: 'Rejeté', review: 'En cours',
   },
 };
 

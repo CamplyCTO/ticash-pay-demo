@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Avatar, Button, Card, Chip, Divider, Row, Screen, Text, useTheme, useThemePreference, type ColorSchemePreference } from '@ticash/ui';
+import { Avatar, Button, Card, Chip, Divider, ListItem, Row, Screen, Text, useTheme, useThemePreference, type ColorSchemePreference } from '@ticash/ui';
 import { LOCALE_LABEL, LOCALES, useI18n, type Locale } from '@ticash/i18n';
 import { isCustomerMe } from '@ticash/api-client';
 import { useAuthStore, useMe } from '@ticash/core';
@@ -10,6 +11,7 @@ export function ProfileScreen() {
   const t = useTheme();
   const { t: tr, locale, setLocale } = useI18n();
   const { preference, setPreference } = useThemePreference();
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const { data } = useMe();
@@ -44,6 +46,17 @@ export function ProfileScreen() {
             );
           })}
         </Row>
+      </Card>
+
+      <Card padded={false} style={{ paddingHorizontal: t.spacing(4), marginBottom: t.spacing(4) }}>
+        <ListItem
+          title={tr('profile.kyc')}
+          subtitle={`${tr('profile.level')} ${me?.kyc?.level ?? 0}`}
+          left={<View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="shield-checkmark-outline" size={18} color={t.colors.primary} /></View>}
+          right={<Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />}
+          onPress={() => router.push('/(app)/kyc')}
+          divider={false}
+        />
       </Card>
 
       <Card style={{ marginBottom: t.spacing(4) }}>

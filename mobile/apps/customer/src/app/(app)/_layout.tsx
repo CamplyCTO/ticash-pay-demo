@@ -25,6 +25,10 @@ export default function AppLayout() {
       <Tabs.Screen name="send" options={{ title: tr('tabs.send'), tabBarIcon: ({ color, size }) => <Ionicons name="paper-plane-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="activity" options={{ title: tr('tabs.activity'), tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ title: tr('tabs.profile'), tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} /> }} />
+      {/* Navigable via router.push, hidden from the tab bar. */}
+      <Tabs.Screen name="receive" options={{ href: null }} />
+      <Tabs.Screen name="topup" options={{ href: null }} />
+      <Tabs.Screen name="kyc" options={{ href: null }} />
     </Tabs>
   );
 }

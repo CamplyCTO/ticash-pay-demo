@@ -1,4 +1,18 @@
-import { ApiError, type ApiErrorCode, type AuthTokens, type Me, type PublicUser } from './types';
+import type { Currency } from './currency';
+import {
+  ApiError,
+  type AirtimeProduct,
+  type ApiErrorCode,
+  type AuthTokens,
+  type KycLimit,
+  type Me,
+  type PublicUser,
+  type RateQuote,
+  type SendTransferInput,
+  type TransferPricing,
+  type TransferResult,
+  type TxRow,
+} from './types';
 
 export interface TicashApiOptions {
   baseUrl: string;
@@ -39,6 +53,43 @@ export class TicashApi {
   // ---- authenticated ----
   me(): Promise<Me> {
     return this.request('GET', '/app/me', { auth: true });
+  }
+
+  // FX: live rate, or full transfer economics when an amount is given.
+  quote(from: Currency, to: Currency): Promise<RateQuote> {
+    return this.request('GET', `/app/fx/quote?from=${from}&to=${to}`, { auth: true });
+  }
+  priceTransfer(from: Currency, to: Currency, amount: string): Promise<TransferPricing> {
+    return this.request('GET', `/app/fx/quote?from=${from}&to=${to}&amount=${encodeURIComponent(amount)}`, { auth: true });
+  }
+  fxRates(): Promise<RateQuote[]> {
+    return this.request('GET', '/app/fx/rates', { auth: true });
+  }
+
+  // Send: cross-currency transfer (sender = the authenticated caller).
+  sendTransfer(input: SendTransferInput): Promise<TransferResult> {
+    return this.request('POST', '/app/transfers', { auth: true, body: input });
+  }
+
+  // History: the caller's own transactions.
+  transactions(limit = 50): Promise<TxRow[]> {
+    return this.request('GET', `/app/transactions?limit=${limit}`, { auth: true });
+  }
+
+  // KYC
+  kycLimits(): Promise<KycLimit[]> {
+    return this.request('GET', '/app/kyc/limits', { auth: true });
+  }
+  kycStart(): Promise<{ token?: string; userId?: string; [k: string]: unknown }> {
+    return this.request('POST', '/app/kyc/start', { auth: true, body: {} });
+  }
+
+  // Airtime
+  airtimeProducts(country: string): Promise<AirtimeProduct[]> {
+    return this.request('GET', `/app/airtime/products?country=${country}`, { auth: true });
+  }
+  airtimeTopup(input: { country: string; accountNumber: string; skuCode: string; cost: string; idempotencyKey?: string }): Promise<{ transactionUid?: string; [k: string]: unknown }> {
+    return this.request('POST', '/app/airtime/topup', { auth: true, body: input });
   }
 
   private async request<T>(method: string, path: string, opts: { body?: unknown; auth?: boolean } = {}): Promise<T> {

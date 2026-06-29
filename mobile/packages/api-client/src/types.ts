@@ -39,6 +39,84 @@ export function isCustomerMe(me: Me): me is MeCustomer {
   return me.user.role === 'customer';
 }
 
+// ---- WS-2 customer flows (BigInt fields arrive as strings over HTTP) ----
+
+export interface RateQuote {
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  midRate: string;
+  rate: string; // customer rate (mid - margin)
+  marginBps: number;
+  platformFeeBps: number;
+  providerFeeBps: number;
+  source: string;
+  asOf: string;
+}
+
+export interface TransferPricing {
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  rate: string;
+  midRate: string;
+  sendMinor: string;
+  platformFeeMinor: string;
+  totalDebitMinor: string; // what the customer pays (source ccy)
+  grossPayoutMinor: string;
+  providerFeeMinor: string;
+  netToRecipientMinor: string; // what the recipient gets (dest ccy)
+  fxMarginMinor: string;
+  platformNetProfitMinor: string;
+}
+
+export interface TransferQuoteDTO {
+  sendMinor: string;
+  feeMinor: string;
+  totalDebitMinor: string;
+  rate: string;
+  receiveMinor: string;
+  fromCurrency: Currency;
+  toCurrency: Currency;
+}
+
+export interface TransferResult {
+  correlationId: string;
+  quote: TransferQuoteDTO;
+  status: 'pending' | 'debited' | 'fx_booked' | 'completed';
+}
+
+export interface TxRow {
+  transactionUid: string;
+  type: string;
+  externalRef: string | null;
+  correlationId: string | null;
+  createdAt: string;
+  accountKey: string;
+  currency: Currency;
+  amountMinor: string; // signed: + credit, - debit
+}
+
+export interface KycLimit {
+  level: number;
+  cap: number;
+}
+
+export interface AirtimeProduct {
+  skuCode: string;
+  description?: string;
+  costMinor?: string;
+  retailMinor?: string;
+  currency?: string;
+  [k: string]: unknown;
+}
+
+export interface SendTransferInput {
+  recipientRef: string;
+  fromCurrency: Currency;
+  toCurrency: Currency;
+  sendAmount: string;
+  idempotencyKey?: string;
+}
+
 export type ApiErrorCode =
   | 'UNAUTHORIZED'
   | 'INVALID_OTP'

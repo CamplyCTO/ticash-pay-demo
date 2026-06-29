@@ -1,22 +1,25 @@
 import React from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Balance, Card, Chip, EmptyState, Logo, Row, Screen, Skeleton, Text, useTheme } from '@ticash/ui';
+import { Balance, Card, Chip, EmptyState, Logo, Row, Screen, Skeleton, Text, useTheme, useToast } from '@ticash/ui';
 import { formatMoneyParts, isCustomerMe, type Currency } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
 import { useMe } from '@ticash/core';
 
 type ActionKey = 'send' | 'receive' | 'topup' | 'usdt';
-const ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: 'send', icon: 'arrow-up' },
-  { key: 'receive', icon: 'arrow-down' },
-  { key: 'topup', icon: 'phone-portrait-outline' },
-  { key: 'usdt', icon: 'logo-bitcoin' },
+const ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
+  { key: 'send', icon: 'arrow-up', route: '/(app)/send' },
+  { key: 'receive', icon: 'arrow-down', route: '/(app)/receive' },
+  { key: 'topup', icon: 'phone-portrait-outline', route: '/(app)/topup' },
+  { key: 'usdt', icon: 'logo-bitcoin' }, // WS-4
 ];
 
 export function HomeScreen() {
   const t = useTheme();
   const { t: tr } = useI18n();
+  const router = useRouter();
+  const toast = useToast();
   const { data, isLoading } = useMe();
   const me = data && isCustomerMe(data) ? data : null;
   const wallets = me?.wallets ?? [];
@@ -57,7 +60,7 @@ export function HomeScreen() {
       {/* Quick actions */}
       <Row gap={3} style={{ marginTop: t.spacing(5) }}>
         {ACTIONS.map((a) => (
-          <Card key={a.key} onPress={() => { /* WS-2 */ }} style={{ flex: 1, alignItems: 'center', paddingVertical: t.spacing(4), gap: t.spacing(2) }}>
+          <Card key={a.key} onPress={() => (a.route ? router.push(a.route) : toast.show(tr('home.usdt')))} style={{ flex: 1, alignItems: 'center', paddingVertical: t.spacing(4), gap: t.spacing(2) }}>
             <View style={{ width: 44, height: 44, borderRadius: t.radius.pill, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name={a.icon} size={20} color={t.colors.primary} />
             </View>
