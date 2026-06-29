@@ -12,6 +12,9 @@ export {
   useSendTransfer,
   useAirtimeTopup,
   useKycStart,
+  useLookupCustomer,
+  useAgentCashIn,
+  useAgentCashOut,
 } from './query';
 export { AppProviders } from './AppProviders';
 export { useSession } from './useSession';

@@ -94,6 +94,54 @@ export function cashOut(args: {
   };
 }
 
+/**
+ * Agent cash-in WITH commission (the agent-app flow). Same money movement as
+ * `cashIn` (agent float → customer wallet) PLUS the agent's commission: the
+ * platform pays `commissionMinor` out of `fee_revenue` into the agent's
+ * `agent_commission` account. One balanced journal (nets to 0 per currency), so
+ * reconciliation Σ=0 still holds. No commission ⇒ collapses to a plain cash-in.
+ */
+export function agentCashIn(args: {
+  agentId: string;
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  commissionMinor: bigint;
+  idempotencyKey: string;
+}): JournalDraft {
+  const { agentId, customerId, currency, amountMinor, commissionMinor } = args;
+  const postings: PostingDraft[] = [
+    debit(agentFloat(agentId, currency), amountMinor),
+    credit(customerWallet(customerId, currency), amountMinor),
+  ];
+  if (commissionMinor > 0n) {
+    postings.push(debit(systemAccount('fee_revenue', currency), commissionMinor));
+    postings.push(credit(agentCommission(agentId, currency), commissionMinor));
+  }
+  return { type: 'cash_in', idempotencyKey: args.idempotencyKey, postings };
+}
+
+/** Agent cash-out WITH commission (customer wallet → agent float, + agent commission). */
+export function agentCashOut(args: {
+  agentId: string;
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  commissionMinor: bigint;
+  idempotencyKey: string;
+}): JournalDraft {
+  const { agentId, customerId, currency, amountMinor, commissionMinor } = args;
+  const postings: PostingDraft[] = [
+    debit(customerWallet(customerId, currency), amountMinor),
+    credit(agentFloat(agentId, currency), amountMinor),
+  ];
+  if (commissionMinor > 0n) {
+    postings.push(debit(systemAccount('fee_revenue', currency), commissionMinor));
+    postings.push(credit(agentCommission(agentId, currency), commissionMinor));
+  }
+  return { type: 'cash_out', idempotencyKey: args.idempotencyKey, postings };
+}
+
 /** Agent buys more float with external money (e.g. PIX to the platform). */
 export function floatTopup(args: {
   agentId: string;

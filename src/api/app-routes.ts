@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { assertCurrency, CURRENCIES, Currency } from '../money/currency';
 import { toMinor } from '../money/money';
-import { customerWallet, agentFloat } from '../ledger/operations';
+import { customerWallet, agentFloat, agentCommission } from '../ledger/operations';
+import { applyBps } from '../fx/rate-service';
 import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
 
@@ -73,7 +74,8 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     }
     const agent = await deps.registry.getAgent(me.externalId);
     const float = await balancesFor(deps, (ccy) => agentFloat(me.externalId, ccy));
-    return { user: { id: me.userId, role: me.role, externalId: me.externalId }, agent: agent ? { commissionBps: agent.commissionBps } : null, float };
+    const commission = await balancesFor(deps, (ccy) => agentCommission(me.externalId, ccy));
+    return { user: { id: me.userId, role: me.role, externalId: me.externalId }, agent: agent ? { commissionBps: agent.commissionBps } : null, float, commission };
   });
 
   // A blocked customer can't transact (mirrors the admin routes).
@@ -158,6 +160,52 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       });
     }
   }
+
+  // ---- Agent operations (cash-in / cash-out for a customer) ----------------
+  // The agent is ALWAYS the authenticated caller; commission accrues to them.
+  const requireAgent = async (req: FastifyRequest): Promise<AppUserContext> => {
+    const me = appUserOf(req);
+    if (me.role !== 'agent') throw new RegistryError('this action is for agents', 'FORBIDDEN');
+    const a = await deps.registry.getAgent(me.externalId);
+    if (a && a.status === 'blocked') throw new RegistryError('agent is blocked', 'FORBIDDEN');
+    return me;
+  };
+
+  // Look up a customer to serve, by phone -> their external id + KYC.
+  // POST (phone in the body) avoids the '+'-in-querystring decoding footgun.
+  if (deps.auth) {
+    app.post('/app/agent/customer', async (req) => {
+      await requireAgent(req);
+      const q = z.object({ phone: phoneSchema }).parse(req.body);
+      const user = await deps.auth!.service.findUserByPhone(q.phone);
+      if (!user || user.role !== 'customer') throw new RegistryError('no customer with that phone', 'NOT_FOUND');
+      const customer = await deps.registry.getCustomer(user.externalId);
+      return { externalId: user.externalId, phone: user.phone, kyc: customer ? { level: customer.kycLevel, status: customer.kycStatus } : null };
+    });
+  }
+
+  const doAgentOp = async (req: FastifyRequest, reply: FastifyReply, kind: 'cash-in' | 'cash-out') => {
+    const me = await requireAgent(req);
+    const b = z
+      .object({ customerId: z.string().min(1), currency: currencySchema, amount: amountSchema, idempotencyKey: z.string().min(1).optional() })
+      .parse(req.body);
+    const customer = await deps.registry.getCustomer(b.customerId);
+    if (!customer) throw new RegistryError(`customer ${b.customerId} not found`, 'NOT_FOUND');
+    if (customer.status === 'blocked') throw new RegistryError('customer is blocked', 'FORBIDDEN');
+    const agent = await deps.registry.getAgent(me.externalId);
+    const amountMinor = money(b.amount, b.currency);
+    // Cash-in increases the customer's spendable e-money, so it respects their KYC
+    // tier cap (same control as a transfer). Cash-out spends their own balance — uncapped.
+    if (kind === 'cash-in' && deps.kyc) await deps.kyc.limits.assertWithinLimit(b.customerId, amountMinor, b.currency);
+    const commissionMinor = applyBps(amountMinor, agent?.commissionBps ?? 0);
+    const idempotencyKey = b.idempotencyKey ?? `app-${kind}:${me.externalId}:${randomUUID()}`;
+    reply.status(201);
+    // agentId is the AUTHENTICATED caller — never taken from the body.
+    const common = { agentId: me.externalId, customerId: b.customerId, currency: b.currency, amountMinor, commissionMinor, idempotencyKey };
+    return kind === 'cash-in' ? deps.ledger.agentCashIn(common) : deps.ledger.agentCashOut(common);
+  };
+  app.post('/app/agent/cash-in', (req, reply) => doAgentOp(req, reply, 'cash-in'));
+  app.post('/app/agent/cash-out', (req, reply) => doAgentOp(req, reply, 'cash-out'));
 
   // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
   if (deps.airtime) {

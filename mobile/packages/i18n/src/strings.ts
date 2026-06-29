@@ -35,6 +35,8 @@ export const en = {
   agent: {
     title: 'Cashier', cashIn: 'Cash in', cashOut: 'Cash out',
     floatBalance: 'Float balance', commissions: 'Commissions', customers: 'Customers', empty: 'No operations yet',
+    lookupPhone: 'Customer phone', findCustomer: 'Find customer', amount: 'Amount', confirm: 'Confirm',
+    done: 'Done!', noCustomer: 'No customer with that phone', earned: 'Earned',
   },
   send: {
     title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient',
@@ -97,6 +99,8 @@ export const pt: Dictionary = {
   agent: {
     title: 'Caixa', cashIn: 'Depósito', cashOut: 'Saque',
     floatBalance: 'Saldo de caixa', commissions: 'Comissões', customers: 'Clientes', empty: 'Nenhuma operação ainda',
+    lookupPhone: 'Telefone do cliente', findCustomer: 'Buscar cliente', amount: 'Valor', confirm: 'Confirmar',
+    done: 'Pronto!', noCustomer: 'Nenhum cliente com esse telefone', earned: 'Ganho',
   },
   send: {
     title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Destinatário',
@@ -154,6 +158,8 @@ export const fr: Dictionary = {
   agent: {
     title: 'Caisse', cashIn: 'Dépôt', cashOut: 'Retrait',
     floatBalance: 'Solde de caisse', commissions: 'Commissions', customers: 'Clients', empty: 'Aucune opération' ,
+    lookupPhone: 'Téléphone du client', findCustomer: 'Trouver le client', amount: 'Montant', confirm: 'Confirmer',
+    done: 'Terminé !', noCustomer: 'Aucun client avec ce numéro', earned: 'Gagné',
   },
   send: {
     title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Destinataire',

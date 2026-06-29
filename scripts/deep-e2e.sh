@@ -133,6 +133,23 @@ check "history shows the transfer" true "$(auth -H "$CAUTH" "$B/app/transactions
 BAL=$(auth -H "$CAUTH" "$B/app/me" | field '.wallets.find(w=>w.currency=="BRL").balanceMinor')
 check "wallet debited once (25000 < bal < 50000)" true "$([ "$BAL" -gt 25000 ] && [ "$BAL" -lt 50000 ] && echo true || echo false)"
 check "KYC L0 cap blocks 600 -> 422" 422 "$(code -H "$CAUTH" -X POST "$B/app/transfers" -d "{\"recipientRef\":\"50912345678\",\"fromCurrency\":\"BRL\",\"toCurrency\":\"HTG\",\"sendAmount\":\"600.00\"}")"
+
+echo "== L. WS-3 agent cash-in/out (commission accrual, scoped, reconciles) =="
+# section J logged the agent out; re-login pedro (commissionBps 75 from section B)
+code -X POST "$B/app/auth/otp" -d "{\"phone\":\"$APH\"}" >/dev/null
+AAT2=$(jpost x /app/auth/verify "{\"phone\":\"$APH\",\"code\":\"$(otp_for "$APH")\"}" | field '.accessToken')
+GAUTH="authorization: Bearer $AAT2"
+code -X POST "$B/agents/float-topup" -d "{\"agentId\":\"pedro\",\"currency\":\"BRL\",\"amount\":\"2000.00\",\"idempotencyKey\":\"app-pedro-float\"}" >/dev/null
+check "agent looks up customer by phone -> EXT1" "$EXT1" "$(auth -H "$GAUTH" -X POST "$B/app/agent/customer" -d "{\"phone\":\"$PH1\"}" | field '.externalId')"
+check "cash-in 300 -> 201"  201 "$(code -H "$GAUTH" -X POST "$B/app/agent/cash-in"  -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"300.00\",\"idempotencyKey\":\"app-ci-1\"}")"
+check "cash-out 100 -> 201" 201 "$(code -H "$GAUTH" -X POST "$B/app/agent/cash-out" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"100.00\",\"idempotencyKey\":\"app-co-1\"}")"
+# commission = 75bps * (300 + 100) = R$3.00 = 300 minor
+check "agent commission = 300 (R\$3.00)" 300 "$(auth -H "$GAUTH" "$B/app/me" | field '.commission.find(w=>w.currency=="BRL").balanceMinor')"
+check "customer token cannot cash-in -> 403" 403 "$(code -H "$CAUTH" -X POST "$B/app/agent/cash-in" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"1.00\"}")"
+check "idempotent cash-in replay -> 201 (no double)" 201 "$(code -H "$GAUTH" -X POST "$B/app/agent/cash-in" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"300.00\",\"idempotencyKey\":\"app-ci-1\"}")"
+RL=$(jget /reconciliation)
+check "reconciliation balanced after agent ops" true "$(echo "$RL" | field '.balanced')"
+check "reconciliation consistent after agent ops" true "$(echo "$RL" | field '.consistent')"
 else
 echo "== I/J. SKIPPED auth section (set LOG=<server log path> to enable OTP capture) =="
 fi

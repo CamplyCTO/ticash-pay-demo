@@ -52,6 +52,30 @@ export class LedgerService {
     return this.store.post(ops.floatTopup(args));
   }
 
+  /** Agent cash-in with commission (agent float → customer wallet + agent earns). */
+  agentCashIn(args: {
+    agentId: string;
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    commissionMinor: bigint;
+    idempotencyKey: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.agentCashIn(args));
+  }
+
+  /** Agent cash-out with commission (customer wallet → agent float + agent earns). */
+  agentCashOut(args: {
+    agentId: string;
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    commissionMinor: bigint;
+    idempotencyKey: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.agentCashOut(args));
+  }
+
   quoteTransfer = ops.quoteTransfer;
 
   /** Post the source-currency debit leg of a transfer (idempotent by key). Saga step. */

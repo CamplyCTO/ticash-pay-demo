@@ -25,6 +25,8 @@ export default function AppLayout() {
       <Tabs.Screen name="float" options={{ title: tr('tabs.float'), tabBarIcon: ({ color, size }) => <Ionicons name="wallet-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="activity" options={{ title: tr('tabs.activity'), tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" color={color} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ title: tr('tabs.profile'), tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} /> }} />
+      {/* Cash-in/out flow: navigable via router.push, hidden from the tab bar. */}
+      <Tabs.Screen name="cash" options={{ href: null }} />
     </Tabs>
   );
 }

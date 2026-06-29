@@ -31,6 +31,7 @@ export interface MeAgent {
   user: { id: string; role: 'agent'; externalId: string };
   agent: { commissionBps: number } | null;
   float: WalletBalance[];
+  commission: WalletBalance[];
 }
 
 export type Me = MeCustomer | MeAgent;
@@ -114,6 +115,20 @@ export interface SendTransferInput {
   fromCurrency: Currency;
   toCurrency: Currency;
   sendAmount: string;
+  idempotencyKey?: string;
+}
+
+// ---- WS-3 agent flows ----
+export interface AgentCustomer {
+  externalId: string;
+  phone: string;
+  kyc: { level: number; status: string } | null;
+}
+
+export interface AgentOpInput {
+  customerId: string;
+  currency: Currency;
+  amount: string;
   idempotencyKey?: string;
 }
 

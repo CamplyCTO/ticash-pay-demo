@@ -137,6 +137,12 @@ export class AuthService {
     return verifyAccessToken(token, this.cfg.jwtSecret, this.now());
   }
 
+  /** Resolve a login by phone (e.g. an agent looking up a customer to serve). */
+  async findUserByPhone(phone: string): Promise<PublicUser | null> {
+    const u = await this.store.getUserByPhone(phone);
+    return u ? toPublic(u) : null;
+  }
+
   // ---- internals -----------------------------------------------------------
 
   private async startSession(user: AppUser, device?: string): Promise<AuthTokens> {

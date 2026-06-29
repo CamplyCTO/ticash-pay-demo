@@ -1,6 +1,8 @@
 import type { Currency } from './currency';
 import {
   ApiError,
+  type AgentCustomer,
+  type AgentOpInput,
   type AirtimeProduct,
   type ApiErrorCode,
   type AuthTokens,
@@ -82,6 +84,17 @@ export class TicashApi {
   }
   kycStart(): Promise<{ token?: string; userId?: string; [k: string]: unknown }> {
     return this.request('POST', '/app/kyc/start', { auth: true, body: {} });
+  }
+
+  // Agent: look up a customer to serve, then cash-in / cash-out (agent = caller).
+  lookupCustomer(phone: string): Promise<AgentCustomer> {
+    return this.request('POST', '/app/agent/customer', { auth: true, body: { phone } });
+  }
+  agentCashIn(input: AgentOpInput): Promise<{ transactionUid?: string; [k: string]: unknown }> {
+    return this.request('POST', '/app/agent/cash-in', { auth: true, body: input });
+  }
+  agentCashOut(input: AgentOpInput): Promise<{ transactionUid?: string; [k: string]: unknown }> {
+    return this.request('POST', '/app/agent/cash-out', { auth: true, body: input });
   }
 
   // Airtime

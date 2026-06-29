@@ -42,7 +42,7 @@ for (const route0 of routes) {
     const page = await ctx.newPage();
     await page.goto(`http://127.0.0.1:${PORT}${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500); // let RN-web hydrate + fonts settle
-    const name = `screens/${outPrefix}-${route.replace(/[\/()]/g, '_') || 'home'}-${scheme}.png`;
+    const name = `screens/${outPrefix}-${route.replace(/[\/()?=&]/g, '_') || 'home'}-${scheme}.png`;
     await page.screenshot({ path: name });
     console.log('shot', name);
     shots++;

@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Currency, KycLimit, Me, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
+import type { AgentOpInput, Currency, KycLimit, Me, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -71,4 +71,31 @@ export function useAirtimeTopup() {
 
 export function useKycStart() {
   return useMutation({ mutationFn: () => api.kycStart() });
+}
+
+// ---- agent (WS-3) ----
+export function useLookupCustomer() {
+  return useMutation({ mutationFn: (phone: string) => api.lookupCustomer(phone) });
+}
+
+export function useAgentCashIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AgentOpInput) => api.agentCashIn(input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      void qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+}
+
+export function useAgentCashOut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AgentOpInput) => api.agentCashOut(input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      void qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
 }
