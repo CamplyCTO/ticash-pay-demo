@@ -1,0 +1,15 @@
+{
+  "name": "ticash-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ticash Pay mobile — customer + agent apps over the proven engine (Phase 3)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "customer": "npm run start -w customer",
+    "agent": "npm run start -w agent"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@ticash/core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ticash/api-client": "*",
+    "@ticash/i18n": "*",
+    "@ticash/ui": "*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "expo-router": "*",
+    "expo-secure-store": "*",
+    "react": "*",
+    "react-native": "*",
+    "react-native-safe-area-context": "*",
+    "zustand": "*"
+  }
+}
