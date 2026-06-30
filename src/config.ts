@@ -71,6 +71,27 @@ export const config = {
       2: Number(process.env.KYC_LIMIT_L2 ?? 50000),
     } as Record<number, number>,
   },
+  /** Security hardening (Phase 3 WS-6). */
+  security: {
+    /** HSTS: 'auto' = only when behind TLS (x-forwarded-proto=https); 'on'/'off' force it. */
+    hsts: (process.env.SECURITY_HSTS ?? 'auto') as 'auto' | 'on' | 'off',
+    /** Max request body (bytes). Default 256 KiB — guards against large-payload abuse. */
+    bodyLimitBytes: Number(process.env.BODY_LIMIT_BYTES ?? 262144),
+    /** Trust the platform proxy (Render) so req.ip is the real client for rate limiting. */
+    trustProxy: (process.env.TRUST_PROXY ?? 'true') !== 'false',
+    /** Refuse to boot with insecure defaults. Enable in prod (set SECURE_CONFIG=1). */
+    requireSecureConfig: process.env.SECURE_CONFIG === '1',
+    /**
+     * Per-IP rate limits (fixed window) — a coarse DoS backstop, NOT the primary
+     * brute-force control (that's the per-phone OTP limit, DB-backed). Defaults are
+     * generous because mobile carrier-grade NAT puts many real users behind one IP;
+     * tune per env. (At real scale, prefer a per-user limiter / Redis store.)
+     */
+    rateLimit: {
+      auth: { max: Number(process.env.RL_AUTH_MAX ?? 60), windowMs: Number(process.env.RL_AUTH_WINDOW_MS ?? 60000) },
+      global: { max: Number(process.env.RL_GLOBAL_MAX ?? 1200), windowMs: Number(process.env.RL_GLOBAL_WINDOW_MS ?? 60000) },
+    },
+  },
   /** Push notifications (Phase 3 WS-5). On by default; uses Expo's push API. */
   push: {
     enabled: (process.env.PUSH ?? 'on') !== 'off',

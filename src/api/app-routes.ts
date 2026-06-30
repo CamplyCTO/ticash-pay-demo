@@ -49,7 +49,9 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
 
   app.post('/app/auth/verify', async (req) => {
     const b = z.object({ phone: phoneSchema, code: z.string().min(4).max(12), device: z.string().optional() }).parse(req.body);
-    return auth.verifyOtp({ phone: b.phone, code: b.code, ...(b.device ? { device: b.device } : {}) });
+    const tokens = await auth.verifyOtp({ phone: b.phone, code: b.code, ...(b.device ? { device: b.device } : {}) });
+    req.log.info({ audit: 'auth.login', userId: tokens.user.id, role: tokens.user.role }, 'login');
+    return tokens;
   });
 
   app.post('/app/auth/refresh', async (req) => {
@@ -118,7 +120,7 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     if (!deps.transfers) throw new RegistryError('transfers are not available', 'VALIDATION');
     reply.status(201);
     // senderId is the AUTHENTICATED caller — never taken from the body.
-    return deps.transfers.service.initiate({
+    const result = await deps.transfers.service.initiate({
       senderId: me.externalId,
       recipientRef: b.recipientRef,
       fromCurrency: b.fromCurrency,
@@ -126,6 +128,8 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       sendMinor,
       idempotencyKey: b.idempotencyKey ?? `app-xfer:${me.externalId}:${randomUUID()}`,
     });
+    req.log.info({ audit: 'money.transfer', senderId: me.externalId, from: b.fromCurrency, to: b.toCurrency, correlationId: result.correlationId }, 'transfer initiated');
+    return result;
   });
 
   // ---- History: the caller's own transactions (across their wallets) ------
@@ -203,6 +207,7 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     // agentId is the AUTHENTICATED caller — never taken from the body.
     const common = { agentId: me.externalId, customerId: b.customerId, currency: b.currency, amountMinor, commissionMinor, idempotencyKey };
     const posted = kind === 'cash-in' ? await deps.ledger.agentCashIn(common) : await deps.ledger.agentCashOut(common);
+    req.log.info({ audit: `money.${kind.replace('-', '_')}`, agentId: me.externalId, customerId: b.customerId, currency: b.currency }, `agent ${kind}`);
     // Money landed in the customer's wallet — alert them. Fire-and-forget: the push
     // must NEVER add latency to (or fail) the money operation.
     if (kind === 'cash-in' && deps.push) {

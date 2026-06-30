@@ -44,6 +44,7 @@ import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
+import { applySecurity, assertSecureConfig } from './security';
 
 export interface ServerDeps {
   ledger: LedgerService;
@@ -121,7 +122,23 @@ export function defaultDeps(): ServerDeps {
 }
 
 export function buildServer(deps: ServerDeps = defaultDeps()) {
-  const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+  // Fail fast in production if the security-critical config is left at dev defaults.
+  assertSecureConfig({
+    requireSecureConfig: config.security.requireSecureConfig,
+    jwtSecret: config.auth.jwtSecret,
+    basicAuthUser: config.basicAuthUser,
+    basicAuthPass: config.basicAuthPass,
+    useInMemory: config.useInMemory,
+  });
+  const app = Fastify({
+    logger: { level: process.env.LOG_LEVEL ?? 'info' },
+    trustProxy: config.security.trustProxy, // real client IP behind Render's proxy
+    bodyLimit: config.security.bodyLimitBytes,
+  });
+
+  // WS-6 hardening: per-IP rate limiting + security headers, registered FIRST so the
+  // rate limiter runs before any auth work.
+  applySecurity(app, config.security);
 
   // Optional HTTP Basic auth over everything except /health (so platform health
   // checks still pass). Enabled only when BASIC_AUTH_USER is set.
