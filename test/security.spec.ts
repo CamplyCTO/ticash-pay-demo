@@ -54,6 +54,23 @@ describe('WS-6 rate limiting', () => {
       expect(r.statusCode).toBe(200);
     }
   });
+
+  it('a 429 short-circuits a LATER auth hook (no double-send crash)', async () => {
+    // Mirrors prod: rate-limit hook (first) then a basic-auth-style hook that also
+    // sends a reply. The 429 must win cleanly, not collide with the 401.
+    const app = Fastify({ trustProxy: true });
+    applySecurity(app, { hsts: 'off', rateLimit: { auth: { max: 100000, windowMs: 60000 }, global: { max: 2, windowMs: 60000 } } });
+    app.addHook('onRequest', async (req, reply) => {
+      // NO reply.sent guard here — this tests Fastify's RAW short-circuit behavior,
+      // i.e. whether the currently-deployed hooks (which lack the guard) are safe.
+      if (!req.headers.authorization) reply.header('WWW-Authenticate', 'Basic').status(401).send({ error: 'Unauthorized' });
+    });
+    app.get('/balances', async () => ({ ok: true }));
+    const hit = () => app.inject({ method: 'GET', url: '/balances' }) as unknown as Promise<InjectResponse>;
+    expect((await hit()).statusCode).toBe(401); // within limit -> basic-auth challenges
+    expect((await hit()).statusCode).toBe(401);
+    expect((await hit()).statusCode).toBe(429); // over limit -> rate-limit wins, no collision
+  });
 });
 
 describe('WS-6 body-size limit', () => {

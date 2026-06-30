@@ -145,6 +145,7 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   if (config.basicAuthUser) {
     const expected = `Basic ${Buffer.from(`${config.basicAuthUser}:${config.basicAuthPass}`).toString('base64')}`;
     app.addHook('onRequest', async (req, reply) => {
+      if (reply.sent) return; // an earlier hook (e.g. rate limit) already responded
       // /health for platform probes; /webhooks/* are authenticated by the
       // provider's own signature (callback secret); /app/* is the mobile API,
       // authenticated per-user by JWT (the boundary hook below) — none use Basic Auth.
@@ -164,6 +165,7 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   if (deps.auth) {
     const authService = deps.auth.service;
     app.addHook('onRequest', async (req, reply) => {
+      if (reply.sent) return; // an earlier hook (e.g. rate limit) already responded
       if (!req.url.startsWith('/app/')) return; // only the mobile API
       if (req.url.startsWith('/app/auth/')) return; // public: register/otp/verify/refresh/logout
       const header = req.headers.authorization ?? '';
