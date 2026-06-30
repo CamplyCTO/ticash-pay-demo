@@ -154,7 +154,8 @@ describe('/app agent flows (WS-3)', () => {
     await post('/app/agent/cash-in', { customerId: cust, currency: 'BRL', amount: '1000.00' }, { authorization: token });
     expect(await bal('ownerType=agent&ownerId=pedro&kind=agent_commission&currency=BRL')).toBe(1500); // 1.5% of 1000
 
-    expect((await post('/agents/pedro/commission', { commissionBps: 99999 })).statusCode).toBe(400); // capped
+    expect((await post('/agents/pedro/commission', { commissionBps: 1000 })).statusCode).toBe(200); // 10% boundary OK
+    expect((await post('/agents/pedro/commission', { commissionBps: 1001 })).statusCode).toBe(400); // >10% capped
     expect((await post('/agents/ghost/commission', { commissionBps: 100 })).statusCode).toBe(404); // unknown agent
   });
 

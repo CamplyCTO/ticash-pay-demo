@@ -74,7 +74,9 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   // applies to the agent's subsequent cash-in/cash-out operations.
   app.post('/agents/:externalId/commission', async (req) => {
     const p = z.object({ externalId: z.string() }).parse(req.params);
-    const b = z.object({ commissionBps: z.number().int().min(0).max(5000) }).parse(req.body);
+    // Cap at 10% (1000 bps): no real agent commission is higher, and it guards
+    // against a %/bps mix-up (e.g. typing "50" meaning 0.5% but getting 50%).
+    const b = z.object({ commissionBps: z.number().int().min(0).max(1000) }).parse(req.body);
     return registry.setAgentCommission(p.externalId, b.commissionBps);
   });
   app.post('/customers/:externalId/status', async (req) => {
