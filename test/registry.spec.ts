@@ -31,4 +31,13 @@ describe('registry (in-memory)', () => {
     const a = await r.getAgent('pedro');
     expect(a).toMatchObject({ floatLimitMinor: 1500000n, commissionBps: 75 });
   });
+
+  it('adjusts an agent commission and rejects an unknown agent', async () => {
+    const r = new InMemoryRegistryStore();
+    await r.createAgent({ externalId: 'pedro', commissionBps: 50 });
+    const updated = await r.setAgentCommission('pedro', 125);
+    expect(updated.commissionBps).toBe(125);
+    expect((await r.getAgent('pedro'))?.commissionBps).toBe(125);
+    await expect(r.setAgentCommission('ghost', 100)).rejects.toThrow(/not found/);
+  });
 });

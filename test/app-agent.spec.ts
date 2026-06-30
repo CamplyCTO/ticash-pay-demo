@@ -140,6 +140,24 @@ describe('/app agent flows (WS-3)', () => {
     expect((await p2('/app/agent/cash-out', { customerId: cust, currency: 'BRL', amount: '600.00' }, { authorization: token })).statusCode).toBe(201);
   });
 
+  it('a panel commission edit takes effect on the next cash-in (and caps out-of-range)', async () => {
+    const token = await loginAgent('pedro', '+5511800000030', 0); // created at 0%
+    const cust = await registerCustomer('+5511800000031');
+    await post('/agents/float-topup', { agentId: 'pedro', currency: 'BRL', amount: '5000.00', idempotencyKey: 'ftc' });
+
+    const upd = await post('/agents/pedro/commission', { commissionBps: 150 }); // 1.50%
+    expect(upd.statusCode).toBe(200);
+    expect(upd.json().commissionBps).toBe(150);
+    expect((await get('/agents')).json().find((a: any) => a.externalId === 'pedro').commissionBps).toBe(150);
+
+    // The next cash-in accrues at the NEW rate.
+    await post('/app/agent/cash-in', { customerId: cust, currency: 'BRL', amount: '1000.00' }, { authorization: token });
+    expect(await bal('ownerType=agent&ownerId=pedro&kind=agent_commission&currency=BRL')).toBe(1500); // 1.5% of 1000
+
+    expect((await post('/agents/pedro/commission', { commissionBps: 99999 })).statusCode).toBe(400); // capped
+    expect((await post('/agents/ghost/commission', { commissionBps: 100 })).statusCode).toBe(404); // unknown agent
+  });
+
   it('agent /app/me + history reflect the float and operations', async () => {
     const token = await loginAgent('pedro', '+5511800000008', 75);
     const cust = await registerCustomer('+5511800000009');

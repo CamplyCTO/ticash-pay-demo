@@ -99,6 +99,16 @@ export class PgRegistryStore implements RegistryStore {
     if (!res.rows[0]) throw new RegistryError(`agent ${externalId} not found`, 'NOT_FOUND');
     return mapAgent(res.rows[0]);
   }
+
+  async setAgentCommission(externalId: string, commissionBps: number): Promise<Agent> {
+    const res = await this.pool.query(
+      `UPDATE agents SET commission_bps = $2 WHERE external_id = $1
+       RETURNING external_id, float_limit_minor, commission_bps, status, created_at`,
+      [externalId, commissionBps],
+    );
+    if (!res.rows[0]) throw new RegistryError(`agent ${externalId} not found`, 'NOT_FOUND');
+    return mapAgent(res.rows[0]);
+  }
 }
 
 function mapCustomer(r: any): Customer {

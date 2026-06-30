@@ -74,6 +74,14 @@ export class InMemoryRegistryStore implements RegistryStore {
     return updated;
   }
 
+  async setAgentCommission(externalId: string, commissionBps: number): Promise<Agent> {
+    const a = this.agents.get(externalId);
+    if (!a) throw new RegistryError(`agent ${externalId} not found`, 'NOT_FOUND');
+    const updated: Agent = { ...a, commissionBps };
+    this.agents.set(externalId, updated);
+    return updated;
+  }
+
   async listAgents(): Promise<Agent[]> {
     return [...this.agents.values()].sort((a, b) => a.externalId.localeCompare(b.externalId));
   }

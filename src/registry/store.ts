@@ -22,4 +22,5 @@ export interface RegistryStore {
   getAgent(externalId: string): Promise<Agent | null>;
   listAgents(): Promise<Agent[]>;
   setAgentStatus(externalId: string, status: PartyStatus): Promise<Agent>;
+  setAgentCommission(externalId: string, commissionBps: number): Promise<Agent>;
 }
