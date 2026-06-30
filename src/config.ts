@@ -71,6 +71,11 @@ export const config = {
       2: Number(process.env.KYC_LIMIT_L2 ?? 50000),
     } as Record<number, number>,
   },
+  /** Push notifications (Phase 3 WS-5). On by default; uses Expo's push API. */
+  push: {
+    enabled: (process.env.PUSH ?? 'on') !== 'off',
+    expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? '', // optional (enhanced security)
+  },
   /** End-user auth for the mobile apps (Phase 3 WS-0). Always on; OTP sender is pluggable. */
   auth: {
     jwtSecret: process.env.AUTH_JWT_SECRET ?? 'dev-insecure-secret-change-me',

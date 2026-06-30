@@ -39,6 +39,14 @@ export class PgAuthStore implements AuthStore {
     return res.rows[0] ? mapUser(res.rows[0]) : null;
   }
 
+  async findUsersByExternalId(externalId: string): Promise<AppUser[]> {
+    const res = await this.pool.query(
+      `SELECT id, role, external_id, phone, email, status, created_at FROM app_users WHERE external_id = $1`,
+      [externalId],
+    );
+    return res.rows.map(mapUser);
+  }
+
   async saveOtp(input: SaveOtpInput): Promise<void> {
     await this.pool.query(
       `INSERT INTO otp_codes (phone, code_hash, purpose, expires_at) VALUES ($1,$2,$3,$4)`,

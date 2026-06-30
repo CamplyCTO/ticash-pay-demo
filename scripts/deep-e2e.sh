@@ -150,6 +150,13 @@ check "idempotent cash-in replay -> 201 (no double)" 201 "$(code -H "$GAUTH" -X 
 RL=$(jget /reconciliation)
 check "reconciliation balanced after agent ops" true "$(echo "$RL" | field '.balanced')"
 check "reconciliation consistent after agent ops" true "$(echo "$RL" | field '.consistent')"
+
+echo "== M. WS-5 push notifications (register/opt-out, scoped; dispatch best-effort) =="
+check "register no token -> 401" 401 "$(code -X POST "$B/app/push/register" -d '{"expoToken":"ExponentPushToken[e2e]"}')"
+check "customer registers device -> 201" 201 "$(code -H "$CAUTH" -X POST "$B/app/push/register" -d '{"expoToken":"ExponentPushToken[e2e]","platform":"ios"}')"
+# a cash-in to the customer now dispatches a push (best-effort, bounded) — money op still succeeds
+check "cash-in with a registered device still 201" 201 "$(code -H "$GAUTH" -X POST "$B/app/agent/cash-in" -d "{\"customerId\":\"$EXT1\",\"currency\":\"BRL\",\"amount\":\"25.00\",\"idempotencyKey\":\"app-ci-push\"}")"
+check "opt-out (unregister) -> ok" true "$(auth -H "$CAUTH" -X POST "$B/app/push/unregister" -d '{"expoToken":"ExponentPushToken[e2e]"}' | field '.ok')"
 else
 echo "== I/J. SKIPPED auth section (set LOG=<server log path> to enable OTP capture) =="
 fi

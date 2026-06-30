@@ -27,6 +27,8 @@ export interface AuthStore {
   createUser(input: CreateAppUserInput): Promise<AppUser>; // unique phone -> CONFLICT
   getUserById(id: string): Promise<AppUser | null>;
   getUserByPhone(phone: string): Promise<AppUser | null>;
+  /** All app_users linked to a party (customers/agents.external_id) — for push dispatch. */
+  findUsersByExternalId(externalId: string): Promise<AppUser[]>;
 
   saveOtp(input: SaveOtpInput): Promise<void>;
   /** Atomically consume the newest valid (unconsumed, unexpired) code for the phone. */

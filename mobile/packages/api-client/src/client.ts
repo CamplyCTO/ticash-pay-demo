@@ -97,6 +97,14 @@ export class TicashApi {
     return this.request('POST', '/app/agent/cash-out', { auth: true, body: input });
   }
 
+  // Push notifications: register / opt-out this device.
+  registerPush(expoToken: string, platform?: string): Promise<{ ok: true }> {
+    return this.request('POST', '/app/push/register', { auth: true, body: platform ? { expoToken, platform } : { expoToken } });
+  }
+  unregisterPush(expoToken: string): Promise<{ ok: true }> {
+    return this.request('POST', '/app/push/unregister', { auth: true, body: { expoToken } });
+  }
+
   // Airtime
   airtimeProducts(country: string): Promise<AirtimeProduct[]> {
     return this.request('GET', `/app/airtime/products?country=${country}`, { auth: true });

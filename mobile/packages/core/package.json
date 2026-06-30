@@ -19,6 +19,8 @@
     "react": "*",
     "react-native": "*",
     "react-native-safe-area-context": "*",
-    "zustand": "*"
+    "zustand": "*",
+    "expo-notifications": "*",
+    "expo-constants": "*"
   }
 }

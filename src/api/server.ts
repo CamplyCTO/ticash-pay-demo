@@ -14,6 +14,7 @@ import {
   createStore,
   createTransferStore,
   createAuthStore,
+  createPushTokenStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
@@ -39,6 +40,8 @@ import { ProviderFeeReconciliation } from '../payouts/reconciliation';
 import { TransferService } from '../transfers/transfer-service';
 import { AuthService } from '../auth/auth-service';
 import { ConsoleOtpSender } from '../auth/otp-sender';
+import { PushService } from '../push/push-service';
+import { ExpoPushSender } from '../push/push-sender';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
 
@@ -63,6 +66,8 @@ export interface ServerDeps {
   kyc?: { service?: KycService; limits: KycLimits };
   /** End-user auth for the mobile apps (phone+OTP -> JWT). Wired by defaultDeps. */
   auth?: { service: AuthService };
+  /** Push notifications (device registry + dispatch). Wired when enabled. */
+  push?: { service: PushService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -105,7 +110,13 @@ export function defaultDeps(): ServerDeps {
     : { limits: kycLimits };
   // End-user auth is always available; the OTP sender is pluggable (console for now,
   // a real SMS gateway once the client picks one — same port pattern as the providers).
-  deps.auth = { service: new AuthService(createAuthStore(), deps.registry, new ConsoleOtpSender(), config.auth) };
+  const authStore = createAuthStore();
+  deps.auth = { service: new AuthService(authStore, deps.registry, new ConsoleOtpSender(), config.auth) };
+  // Push: device registry + dispatch (shares the auth store to resolve party -> users).
+  if (config.push.enabled) {
+    const sender = new ExpoPushSender(config.push.expoAccessToken ? { accessToken: config.push.expoAccessToken } : {});
+    deps.push = { service: new PushService(createPushTokenStore(), authStore, sender) };
+  }
   return deps;
 }
 

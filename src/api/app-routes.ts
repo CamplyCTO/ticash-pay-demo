@@ -202,10 +202,33 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     reply.status(201);
     // agentId is the AUTHENTICATED caller — never taken from the body.
     const common = { agentId: me.externalId, customerId: b.customerId, currency: b.currency, amountMinor, commissionMinor, idempotencyKey };
-    return kind === 'cash-in' ? deps.ledger.agentCashIn(common) : deps.ledger.agentCashOut(common);
+    const posted = kind === 'cash-in' ? await deps.ledger.agentCashIn(common) : await deps.ledger.agentCashOut(common);
+    // Money landed in the customer's wallet — alert them. Fire-and-forget: the push
+    // must NEVER add latency to (or fail) the money operation.
+    if (kind === 'cash-in' && deps.push) {
+      void deps.push.service.notifyMoneyIn(b.customerId, b.currency, amountMinor).catch(() => { /* best-effort */ });
+    }
+    return posted;
   };
   app.post('/app/agent/cash-in', (req, reply) => doAgentOp(req, reply, 'cash-in'));
   app.post('/app/agent/cash-out', (req, reply) => doAgentOp(req, reply, 'cash-out'));
+
+  // ---- Push notifications: register / opt-out a device (scoped to caller) --
+  if (deps.push) {
+    const push = deps.push.service;
+    app.post('/app/push/register', async (req, reply) => {
+      const me = appUserOf(req);
+      const b = z.object({ expoToken: z.string().min(1), platform: z.string().optional() }).parse(req.body);
+      await push.register({ userId: me.userId, expoToken: b.expoToken, ...(b.platform ? { platform: b.platform } : {}) });
+      reply.status(201);
+      return { ok: true };
+    });
+    app.post('/app/push/unregister', async (req) => {
+      const b = z.object({ expoToken: z.string().min(1) }).parse(req.body);
+      await push.unregister(b.expoToken);
+      return { ok: true };
+    });
+  }
 
   // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
   if (deps.airtime) {

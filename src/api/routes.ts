@@ -321,6 +321,11 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
             externalRef: event.providerId,
           });
           await intents.markPaid(event.providerId);
+          // Money landed in the wallet — alert the customer. Fire-and-forget: never
+          // delay or fail the webhook ack on push.
+          if (deps.push) {
+            void deps.push.service.notifyMoneyIn(intent.customerId, intent.currency, intent.amountMinor).catch(() => { /* best-effort */ });
+          }
           result = { ok: true, transactionUid: posted.transactionUid };
         }
       }

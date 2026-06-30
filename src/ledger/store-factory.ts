@@ -28,6 +28,7 @@ import { PgAirtimeMarginStore } from '../airtime/pg-margin-store';
 import { AuthStore } from '../auth/auth-store';
 import { InMemoryAuthStore } from '../auth/in-memory-auth-store';
 import { PgAuthStore } from '../auth/pg-auth-store';
+import { InMemoryPushTokenStore, PgPushTokenStore, PushTokenStore } from '../push/push-token-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -70,4 +71,8 @@ export function createAirtimeMarginStore(): AirtimeMarginStore {
 
 export function createAuthStore(): AuthStore {
   return config.useInMemory ? new InMemoryAuthStore() : new PgAuthStore(getPool());
+}
+
+export function createPushTokenStore(): PushTokenStore {
+  return config.useInMemory ? new InMemoryPushTokenStore() : new PgPushTokenStore(getPool());
 }

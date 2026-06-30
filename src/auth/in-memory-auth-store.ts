@@ -54,6 +54,10 @@ export class InMemoryAuthStore implements AuthStore {
     return id ? this.users.get(id) ?? null : null;
   }
 
+  async findUsersByExternalId(externalId: string): Promise<AppUser[]> {
+    return [...this.users.values()].filter((u) => u.externalId === externalId);
+  }
+
   async saveOtp(input: SaveOtpInput): Promise<void> {
     this.otps.push({ ...input, consumedAt: null, createdAt: this.clock() });
   }
