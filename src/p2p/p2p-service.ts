@@ -129,17 +129,19 @@ export class P2PService {
   async submitPayment(args: { orderId: string; buyerId: string; proofRef: string }): Promise<Order> {
     const order = await this.requireOrder(args.orderId);
     if (order.buyerId !== args.buyerId) throw new P2PError('not your order', 'FORBIDDEN');
-    if (order.status !== 'created') throw new P2PError(`order is ${order.status}, cannot submit payment`, 'CONFLICT');
     const timeoutAt = new Date(Date.now() + this.cfg.confirmWindowMinutes * 60_000).toISOString();
-    return this.store.updateOrder(order.id, { status: 'payment_submitted', proofRef: args.proofRef, timeoutAt });
+    const updated = await this.store.casUpdate(order.id, ['created'], { status: 'payment_submitted', proofRef: args.proofRef, timeoutAt });
+    if (!updated) throw new P2PError(`order is ${order.status}, cannot submit payment`, 'CONFLICT');
+    return updated;
   }
 
   /** Buyer disputes an unconfirmed order (paid but not released) → goes to admin. */
   async disputeOrder(args: { orderId: string; buyerId: string; reason: string }): Promise<Order> {
     const order = await this.requireOrder(args.orderId);
     if (order.buyerId !== args.buyerId) throw new P2PError('not your order', 'FORBIDDEN');
-    if (order.status !== 'payment_submitted') throw new P2PError(`order is ${order.status}, cannot dispute`, 'CONFLICT');
-    return this.store.updateOrder(order.id, { status: 'disputed', disputeReason: args.reason });
+    const updated = await this.store.casUpdate(order.id, ['payment_submitted'], { status: 'disputed', disputeReason: args.reason });
+    if (!updated) throw new P2PError(`order is ${order.status}, cannot dispute`, 'CONFLICT');
+    return updated;
   }
 
   // ---- seller: confirm / reject --------------------------------------------
@@ -148,8 +150,7 @@ export class P2PService {
   async releaseOrder(args: { orderId: string; merchantId: string }): Promise<Order> {
     const order = await this.requireOrder(args.orderId);
     if (order.merchantId !== args.merchantId) throw new P2PError('not your order', 'FORBIDDEN');
-    if (order.status !== 'payment_submitted') throw new P2PError(`order is ${order.status}, cannot release`, 'CONFLICT');
-    return this.doRelease(order);
+    return this.doRelease(order, ['payment_submitted']);
   }
 
   /** Seller or buyer cancels. Buyer only before paying; seller may reject a claimed payment. */
@@ -182,7 +183,7 @@ export class P2PService {
     if (order.status !== 'disputed' && order.status !== 'payment_submitted') {
       throw new P2PError(`order is ${order.status}, nothing to resolve`, 'CONFLICT');
     }
-    return args.action === 'release' ? this.doRelease(order) : this.store.cancelOrder(order.id);
+    return args.action === 'release' ? this.doRelease(order, ['payment_submitted', 'disputed']) : this.store.cancelOrder(order.id);
   }
 
   listMyOrders(partyId: string): Promise<Order[]> {
@@ -197,17 +198,31 @@ export class P2PService {
 
   // ---- internals -----------------------------------------------------------
 
-  private async doRelease(order: Order): Promise<Order> {
-    await this.ledger.p2pRelease({
-      merchantId: order.merchantId,
-      buyerId: order.buyerId,
-      currency: order.asset,
-      amountMinor: order.assetMinor,
-      commissionMinor: order.commissionMinor,
-      idempotencyKey: `p2p:release:${order.id}`,
-      correlationId: order.id,
-    });
-    return this.store.updateOrder(order.id, { status: 'released' });
+  /**
+   * Claim the order (status → released) ATOMICALLY first, then move the money.
+   * The atomic claim makes release mutually exclusive with cancel/dispute — a
+   * concurrent cancel can no longer restore the reservation after funds leave
+   * escrow. If the (idempotent) ledger post fails, the claim is reverted so the
+   * order can be retried. Escrow is guaranteed to hold the reserved amount here.
+   */
+  private async doRelease(order: Order, from: Order['status'][]): Promise<Order> {
+    const claimed = await this.store.casUpdate(order.id, from, { status: 'released' });
+    if (!claimed) throw new P2PError(`order is ${order.status}, cannot release`, 'CONFLICT');
+    try {
+      await this.ledger.p2pRelease({
+        merchantId: order.merchantId,
+        buyerId: order.buyerId,
+        currency: order.asset,
+        amountMinor: order.assetMinor,
+        commissionMinor: order.commissionMinor,
+        idempotencyKey: `p2p:release:${order.id}`,
+        correlationId: order.id,
+      });
+    } catch (err) {
+      await this.store.casUpdate(order.id, ['released'], { status: order.status }).catch(() => {});
+      throw err;
+    }
+    return claimed;
   }
 
   private async requireOrder(id: string): Promise<Order> {

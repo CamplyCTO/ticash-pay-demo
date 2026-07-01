@@ -42,6 +42,13 @@ export interface P2PStore {
   listOrdersByMerchant(merchantId: string): Promise<Order[]>;
   listOrdersByStatus(status: OrderStatus): Promise<Order[]>;
   updateOrder(id: string, patch: OrderPatch): Promise<Order>;
+  /**
+   * Atomically apply `patch` (including the new status) ONLY IF the order's
+   * current status is one of `from`. Returns the updated order, or null if the
+   * status no longer matches (lost the race). This serializes release/cancel/
+   * dispute/pay so two of them can never both take effect.
+   */
+  casUpdate(id: string, from: OrderStatus[], patch: OrderPatch & { status: OrderStatus }): Promise<Order | null>;
   /** Atomically cancel a cancellable order and return its reservation to the offer. */
   cancelOrder(id: string): Promise<Order>;
   /** Are there orders still holding escrow against this offer? (blocks close) */
@@ -119,6 +126,16 @@ export class InMemoryP2PStore implements P2PStore {
     const o = this.orders.get(id);
     if (!o) throw new P2PError(`order ${id} not found`, 'NOT_FOUND');
     if (patch.status !== undefined) o.status = patch.status;
+    if (patch.proofRef !== undefined) o.proofRef = patch.proofRef;
+    if (patch.disputeReason !== undefined) o.disputeReason = patch.disputeReason;
+    if (patch.timeoutAt !== undefined) o.timeoutAt = patch.timeoutAt;
+    o.updatedAt = new Date().toISOString();
+    return clone(o);
+  }
+  async casUpdate(id: string, from: OrderStatus[], patch: OrderPatch & { status: OrderStatus }): Promise<Order | null> {
+    const o = this.orders.get(id);
+    if (!o || !from.includes(o.status)) return null;
+    o.status = patch.status;
     if (patch.proofRef !== undefined) o.proofRef = patch.proofRef;
     if (patch.disputeReason !== undefined) o.disputeReason = patch.disputeReason;
     if (patch.timeoutAt !== undefined) o.timeoutAt = patch.timeoutAt;
@@ -240,6 +257,23 @@ export class PgP2PStore implements P2PStore {
     const res = await this.pool.query(`UPDATE p2p_orders SET ${sets.join(', ')} WHERE order_uid = $1 RETURNING *`, vals);
     if (!res.rows[0]) throw new P2PError(`order ${id} not found`, 'NOT_FOUND');
     return mapOrder(res.rows[0]);
+  }
+  async casUpdate(id: string, from: OrderStatus[], patch: OrderPatch & { status: OrderStatus }): Promise<Order | null> {
+    const sets = ['status = $3'];
+    const vals: unknown[] = [id, from, patch.status];
+    const add = (col: string, v: unknown) => {
+      vals.push(v);
+      sets.push(`${col} = $${vals.length}`);
+    };
+    if (patch.proofRef !== undefined) add('proof_ref', patch.proofRef);
+    if (patch.disputeReason !== undefined) add('dispute_reason', patch.disputeReason);
+    if (patch.timeoutAt !== undefined) add('timeout_at', patch.timeoutAt);
+    sets.push('updated_at = now()');
+    const res = await this.pool.query(
+      `UPDATE p2p_orders SET ${sets.join(', ')} WHERE order_uid = $1 AND status = ANY($2) RETURNING *`,
+      vals,
+    );
+    return res.rows[0] ? mapOrder(res.rows[0]) : null;
   }
   async cancelOrder(id: string): Promise<Order> {
     const client = await this.pool.connect();

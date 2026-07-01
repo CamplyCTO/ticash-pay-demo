@@ -201,6 +201,23 @@ describe('P2P USDT escrow marketplace (WS-4)', () => {
     expect(await bal(wallet(buyer.ext))).toBe(9_800000);
   });
 
+  it('release and cancel are mutually exclusive: cancel after release is rejected and does not restore the reservation', async () => {
+    const seller = await loginCustomer('+5511900000120');
+    const buyer = await loginCustomer('+5511900000121');
+    await fundUSDT(seller.ext, '10.000000');
+    const offerId = (await listOffer(seller, '10.000000')).json().id;
+    const order = (await post('/app/p2p/orders', { offerId, amount: '10.000000' }, { authorization: buyer.token })).json();
+    await post(`/app/p2p/orders/${order.id}/pay`, { proofRef: 'p' }, { authorization: buyer.token });
+    expect((await post(`/app/p2p/orders/${order.id}/release`, {}, { authorization: seller.token })).statusCode).toBe(200);
+    // A merchant cancel after release must be rejected (the CAS guard) — no double-effect.
+    expect((await post(`/app/p2p/orders/${order.id}/cancel`, {}, { authorization: seller.token })).statusCode).toBe(409);
+    // The offer's availability was NOT inflated back, and escrow is truly drained.
+    const mine = (await get('/app/p2p/offers/mine', { authorization: seller.token })).json();
+    expect(BigInt(mine[0].remainingMinor)).toBe(0n);
+    expect(await bal(escrow(seller.ext))).toBe(0);
+    expect(await bal(wallet(buyer.ext))).toBe(9_800000);
+  });
+
   it('an order is visible only to its buyer or seller (not a third party)', async () => {
     const seller = await loginCustomer('+5511900000100');
     const buyer = await loginCustomer('+5511900000101');
