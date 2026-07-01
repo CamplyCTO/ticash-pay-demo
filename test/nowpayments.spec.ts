@@ -8,6 +8,7 @@ import { InMemoryProviderEventStore } from '../src/payments/event-store';
 import { LedgerService } from '../src/ledger/service';
 import { AuthService, AuthConfig } from '../src/auth/auth-service';
 import { OtpSender } from '../src/auth/otp-sender';
+import { createHmac } from 'node:crypto';
 import { NowPaymentsAdapter, signIpn, stableStringify } from '../src/deposits/nowpayments-adapter';
 import type { HttpClient } from '../src/payments/types';
 
@@ -54,6 +55,16 @@ describe('NowPaymentsAdapter', () => {
     expect(adapter.parseIpn(JSON.stringify(body), 'deadbeef')).toBeNull(); // wrong sig
     expect(adapter.parseIpn(JSON.stringify({ ...body, payment_status: 'finishedX' }), sig)).toBeNull(); // tampered
     expect(adapter.parseIpn(JSON.stringify(body), undefined)).toBeNull(); // missing sig
+  });
+
+  it('parseIpn accepts a signature computed over the RAW body bytes (unsorted)', () => {
+    const adapter = new NowPaymentsAdapter(NP_CFG);
+    // Raw payload with keys NOT in sorted order — only the raw-body candidate matches.
+    const raw = '{"payment_status":"finished","payment_id":7}';
+    const sig = createHmac('sha512', NP_CFG.ipnSecret).update(raw).digest('hex');
+    const ipn = adapter.parseIpn(raw, sig);
+    expect(ipn).not.toBeNull();
+    expect(ipn!.finished).toBe(true);
   });
 
   it("parseIpn accepts NOWPayments' PHP-style (slash-escaped) signing", () => {
@@ -125,6 +136,23 @@ describe('USDT deposit settlement (NOWPayments IPN → wallet)', () => {
     const recon = (await get('/reconciliation')).json();
     expect(recon.balanced).toBe(true);
     expect(recon.consistent).toBe(true);
+  });
+
+  it('credits the EXACT USDT received (actually_paid), not the requested amount', async () => {
+    const me = await loginCustomer('+5511700000005');
+    await post('/app/usdt/deposit', { amount: '100' }, { authorization: me.token }); // requested 100
+    // The user actually sent 99.5 USDT (peg/network rounding) — credit exactly that.
+    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 99.5 });
+    expect(res.statusCode).toBe(200);
+    expect(await bal(me.ext)).toBe(99_500000);
+  });
+
+  it('falls back to the requested amount when actually_paid is absent', async () => {
+    const me = await loginCustomer('+5511700000006');
+    await post('/app/usdt/deposit', { amount: '100' }, { authorization: me.token });
+    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20' });
+    expect(res.statusCode).toBe(200);
+    expect(await bal(me.ext)).toBe(100_000000);
   });
 
   it('a forged/invalid signature is rejected with 401 and never credits', async () => {

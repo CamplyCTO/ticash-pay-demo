@@ -101,7 +101,10 @@ export const config = {
     apiKey: process.env.NOWPAYMENTS_API_KEY ?? '',
     ipnSecret: process.env.NOWPAYMENTS_IPN_SECRET ?? '',
     payCurrency: process.env.NOWPAYMENTS_PAY_CURRENCY ?? 'usdttrc20', // USDT on Tron (low fee)
-    priceCurrency: process.env.NOWPAYMENTS_PRICE_CURRENCY ?? 'usd', // USDT ≈ USD
+    // 'usd' is the universally-supported pricing combo. Peg drift is a non-issue
+    // because settlement credits the EXACT USDT received (actually_paid from the
+    // signed IPN), so the user is never short-changed regardless of the peg.
+    priceCurrency: process.env.NOWPAYMENTS_PRICE_CURRENCY ?? 'usd',
     callbackUrl: process.env.NOWPAYMENTS_CALLBACK_URL ?? '', // public /webhooks/nowpayments
   },
   /** P2P USDT escrow marketplace (Phase 3 WS-4). Always on; the on/off-ramp

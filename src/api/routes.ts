@@ -194,6 +194,20 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   // ---- USDT deposit settlement (NOWPayments IPN) --------------------------
   if (deps.deposits) {
     const dep = deps.deposits;
+    // Parse a decimal USDT amount (pay_currency has 6 dp, = USDT scale) to minor,
+    // truncating any excess precision so we never credit more than was received.
+    const usdtMinorOrNull = (s: string | undefined): bigint | null => {
+      if (!s) return null;
+      const m = /^(\d+)(?:\.(\d+))?$/.exec(s.trim());
+      if (!m) return null;
+      const frac = (m[2] ?? '').padEnd(6, '0').slice(0, 6);
+      try {
+        const v = BigInt(m[1] as string) * 1_000000n + BigInt(frac);
+        return v > 0n ? v : null;
+      } catch {
+        return null;
+      }
+    };
     app.get('/deposits/intents', async () => dep.intents.list());
     // IPN callback: authenticated by the NOWPayments HMAC signature, NOT Basic
     // Auth (the /webhooks/* path is exempted by the onRequest hook in server.ts).
@@ -220,17 +234,21 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         } else if (intent.status === 'paid') {
           result = { ok: true, alreadyCredited: ipn.paymentId };
         } else {
-          // Credit the RECORDED amount, idempotent by provider payment id.
+          // Credit the EXACT USDT received (actually_paid from the HMAC-verified
+          // IPN) — trustworthy because signed, and fair to the user under any
+          // USD/USDT peg drift. Fall back to the recorded amount if omitted.
+          // Idempotent by provider payment id (a replay can't double-credit).
+          const creditMinor = usdtMinorOrNull(ipn.actuallyPaid) ?? intent.amountMinor;
           const posted = await ledger.fundWallet({
             customerId: intent.customerId,
             currency: intent.currency,
-            amountMinor: intent.amountMinor,
+            amountMinor: creditMinor,
             idempotencyKey: `nowpayments:${ipn.paymentId}`,
             externalRef: ipn.paymentId,
           });
           await dep.intents.markPaid(ipn.paymentId);
-          if (deps.push) void deps.push.service.notifyMoneyIn(intent.customerId, intent.currency, intent.amountMinor).catch(() => { /* best-effort */ });
-          req.log.info({ audit: 'usdt.deposit', paymentId: ipn.paymentId, customerId: intent.customerId, amountMinor: intent.amountMinor.toString(), actuallyPaid: ipn.actuallyPaid ?? null }, 'usdt deposit credited');
+          if (deps.push) void deps.push.service.notifyMoneyIn(intent.customerId, intent.currency, creditMinor).catch(() => { /* best-effort */ });
+          req.log.info({ audit: 'usdt.deposit', paymentId: ipn.paymentId, customerId: intent.customerId, creditedMinor: creditMinor.toString(), requestedMinor: intent.amountMinor.toString() }, 'usdt deposit credited');
           result = { ok: true, transactionUid: posted.transactionUid };
         }
       }

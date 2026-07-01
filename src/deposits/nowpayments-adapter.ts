@@ -96,7 +96,7 @@ export class NowPaymentsAdapter {
       return null;
     }
     if (!body || typeof body !== 'object') return null;
-    if (!this.verifySignature(body, signature)) return null;
+    if (!this.verifySignature(rawBody, body, signature)) return null;
     const paymentId = body.payment_id != null ? String(body.payment_id) : '';
     if (!paymentId) return null;
     const status = String(body.payment_status ?? '');
@@ -111,10 +111,17 @@ export class NowPaymentsAdapter {
     };
   }
 
-  private verifySignature(body: unknown, signature: string): boolean {
-    for (const escapeSlash of [false, true]) {
-      const serialized = stableStringify(body, escapeSlash);
-      const expected = createHmac('sha512', this.cfg.ipnSecret).update(serialized, 'utf8').digest('hex');
+  /**
+   * Accept the signature if it matches ANY plausible NOWPayments serialization —
+   * the raw bytes as sent, the alpha-sorted JSON (plain), or the sorted JSON with
+   * PHP's default '/' escaping. Each candidate is a full HMAC-SHA512 keyed by the
+   * IPN secret, so trying several does NOT weaken security (a forger still needs
+   * the secret) — it only makes us robust to their exact encoding.
+   */
+  private verifySignature(rawBody: string, body: unknown, signature: string): boolean {
+    const candidates = [rawBody, stableStringify(body, false), stableStringify(body, true)];
+    for (const c of candidates) {
+      const expected = createHmac('sha512', this.cfg.ipnSecret).update(c, 'utf8').digest('hex');
       if (constantTimeEqual(expected, signature)) return true;
     }
     return false;
