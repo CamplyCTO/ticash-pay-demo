@@ -8,6 +8,7 @@ export type AccountKind =
   | 'wallet' // customer e-money wallet
   | 'agent_float' // agent's pre-funded e-money
   | 'agent_commission' // agent earnings
+  | 'p2p_escrow' // seller's asset locked for a P2P (USDT) sell offer — holder-owned, non-negative
   | 'settlement' // external world / bank rail (PIX in/out, payout out) — system
   | 'fee_revenue' // platform fees — system
   | 'fx_position' // FX desk position per currency — system
@@ -19,6 +20,7 @@ export const NON_NEGATIVE_KINDS: ReadonlySet<AccountKind> = new Set<AccountKind>
   'wallet',
   'agent_float',
   'agent_commission',
+  'p2p_escrow',
 ]);
 
 /** A stable, human-readable account identity used by the domain. */
@@ -42,6 +44,9 @@ export type TxType =
   | 'transfer'
   | 'payout'
   | 'airtime'
+  | 'p2p_lock' // seller locks USDT into escrow for a sell offer
+  | 'p2p_release' // escrow released to buyer, platform takes commission
+  | 'p2p_unlock' // un-sold escrow returned to the seller
   | 'reversal';
 
 /** One immutable double-entry line, pre-persistence. */

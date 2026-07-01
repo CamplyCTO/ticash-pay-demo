@@ -29,6 +29,7 @@ import { AuthStore } from '../auth/auth-store';
 import { InMemoryAuthStore } from '../auth/in-memory-auth-store';
 import { PgAuthStore } from '../auth/pg-auth-store';
 import { InMemoryPushTokenStore, PgPushTokenStore, PushTokenStore } from '../push/push-token-store';
+import { InMemoryP2PStore, P2PStore, PgP2PStore } from '../p2p/p2p-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -75,4 +76,8 @@ export function createAuthStore(): AuthStore {
 
 export function createPushTokenStore(): PushTokenStore {
   return config.useInMemory ? new InMemoryPushTokenStore() : new PgPushTokenStore(getPool());
+}
+
+export function createP2PStore(): P2PStore {
+  return config.useInMemory ? new InMemoryP2PStore() : new PgP2PStore(getPool());
 }

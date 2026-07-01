@@ -197,6 +197,44 @@ export class LedgerService {
     return this.store.post(ops.settlePayout(args));
   }
 
+  /** P2P: lock a seller's USDT into escrow for a sell offer (wallet → escrow). */
+  p2pLock(args: {
+    merchantId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    correlationId?: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.p2pLock(args));
+  }
+
+  /** P2P: release escrowed USDT to the buyer, taking the platform commission. */
+  p2pRelease(args: {
+    merchantId: string;
+    buyerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    commissionMinor: bigint;
+    idempotencyKey: string;
+    correlationId?: string;
+  }): Promise<PostedJournal> {
+    if (args.commissionMinor < 0n || args.commissionMinor > args.amountMinor) {
+      throw new LedgerError(`p2p commission ${args.commissionMinor} out of range for ${args.amountMinor}`, 'VALIDATION');
+    }
+    return this.store.post(ops.p2pRelease(args));
+  }
+
+  /** P2P: return un-sold escrow to the seller (escrow → wallet), e.g. on offer close. */
+  p2pUnlock(args: {
+    merchantId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    correlationId?: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.p2pUnlock(args));
+  }
+
   getBalance(spec: AccountSpec): Promise<bigint> {
     return this.store.getBalance(spec);
   }

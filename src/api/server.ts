@@ -15,6 +15,7 @@ import {
   createTransferStore,
   createAuthStore,
   createPushTokenStore,
+  createP2PStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
@@ -42,6 +43,7 @@ import { AuthService } from '../auth/auth-service';
 import { ConsoleOtpSender } from '../auth/otp-sender';
 import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
+import { P2PService } from '../p2p/p2p-service';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
 import { applySecurity, assertSecureConfig } from './security';
@@ -69,6 +71,8 @@ export interface ServerDeps {
   auth?: { service: AuthService };
   /** Push notifications (device registry + dispatch). Wired when enabled. */
   push?: { service: PushService };
+  /** P2P USDT escrow marketplace (WS-4). Always wired by defaultDeps. */
+  p2p?: { service: P2PService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -118,6 +122,9 @@ export function defaultDeps(): ServerDeps {
     const sender = new ExpoPushSender(config.push.expoAccessToken ? { accessToken: config.push.expoAccessToken } : {});
     deps.push = { service: new PushService(createPushTokenStore(), authStore, sender) };
   }
+  // P2P USDT escrow marketplace — always available (the NOWPayments on/off-ramp
+  // that funds/withdraws USDT is wired separately once the client provides keys).
+  deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p) };
   return deps;
 }
 

@@ -235,6 +235,93 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     });
   }
 
+  // ---- P2P USDT marketplace: sellers list, buyers order, seller confirms ---
+  if (deps.p2p) {
+    const p2p = deps.p2p.service;
+    const methodSchema = z.object({ type: z.string().min(1).max(32), label: z.string().min(1).max(48), account: z.string().min(1).max(120) });
+
+    // Browse active offers (any authenticated user). The merchant's account
+    // NUMBER is withheld here (PII) and only revealed in the buyer's own order.
+    const publicOffer = (o: Awaited<ReturnType<typeof p2p.listActiveOffers>>[number]) => ({
+      ...o,
+      methods: o.methods.map((m) => ({ type: m.type, label: m.label })),
+    });
+    app.get('/app/p2p/offers', async () => (await p2p.listActiveOffers()).map(publicOffer));
+    // The caller's own offers (as a seller).
+    app.get('/app/p2p/offers/mine', async (req) => {
+      const me = await requireCustomer(req);
+      return p2p.listMyOffers(me.externalId);
+    });
+    // List USDT for sale — locks the amount from the seller's USDT wallet into escrow.
+    app.post('/app/p2p/offers', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z.object({
+        fiatCurrency: currencySchema,
+        pricePerUnit: z.string().min(1),
+        amount: amountSchema, // USDT
+        methods: z.array(methodSchema).min(1).max(6),
+      }).parse(req.body);
+      reply.status(201);
+      return p2p.createOffer({ merchantId: me.externalId, fiatCurrency: b.fiatCurrency, pricePerUnit: b.pricePerUnit, totalMinor: money(b.amount, 'USDT'), methods: b.methods });
+    });
+    app.post('/app/p2p/offers/:id/close', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return p2p.closeOffer({ offerId: p.id, merchantId: me.externalId });
+    });
+
+    // Buyer opens an order against an offer (reserves escrow; no money moves yet).
+    app.post('/app/p2p/orders', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z.object({ offerId: z.string().min(1), amount: amountSchema, methodType: z.string().optional() }).parse(req.body);
+      reply.status(201);
+      return p2p.openOrder({ offerId: b.offerId, buyerId: me.externalId, assetMinor: money(b.amount, 'USDT'), ...(b.methodType ? { methodType: b.methodType } : {}) });
+    });
+    // The caller's orders — as buyer by default, as seller with ?role=seller.
+    app.get('/app/p2p/orders', async (req) => {
+      const me = await requireCustomer(req);
+      const q = z.object({ role: z.enum(['buyer', 'seller']).optional() }).parse(req.query);
+      return q.role === 'seller' ? p2p.listOrdersForMerchant(me.externalId) : p2p.listMyOrders(me.externalId);
+    });
+    // Single order — visible only to its buyer or seller.
+    app.get('/app/p2p/orders/:id', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const order = await p2p.getOrder(p.id);
+      if (!order || (order.buyerId !== me.externalId && order.merchantId !== me.externalId)) throw new RegistryError('order not found', 'NOT_FOUND');
+      return order;
+    });
+    // Buyer: report the off-platform payment sent (with a proof reference).
+    app.post('/app/p2p/orders/:id/pay', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const b = z.object({ proofRef: z.string().min(1).max(2048) }).parse(req.body);
+      return p2p.submitPayment({ orderId: p.id, buyerId: me.externalId, proofRef: b.proofRef });
+    });
+    // Seller: confirm receipt → release escrowed USDT to the buyer (minus commission).
+    app.post('/app/p2p/orders/:id/release', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const order = await p2p.releaseOrder({ orderId: p.id, merchantId: me.externalId });
+      req.log.info({ audit: 'p2p.release', orderId: order.id, merchantId: me.externalId, buyerId: order.buyerId }, 'p2p release');
+      if (deps.push) void deps.push.service.notifyMoneyIn(order.buyerId, order.asset, order.netToBuyerMinor).catch(() => { /* best-effort */ });
+      return order;
+    });
+    // Buyer or seller cancels (buyer only before paying; seller may reject a claim).
+    app.post('/app/p2p/orders/:id/cancel', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return p2p.cancelOrder({ orderId: p.id, byId: me.externalId, role: 'customer' });
+    });
+    // Buyer disputes (paid but not released) → escalates to the admin/central.
+    app.post('/app/p2p/orders/:id/dispute', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const b = z.object({ reason: z.string().min(1).max(500) }).parse(req.body);
+      return p2p.disputeOrder({ orderId: p.id, buyerId: me.externalId, reason: b.reason });
+    });
+  }
+
   // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
   if (deps.airtime) {
     const air = deps.airtime.service;

@@ -132,6 +132,57 @@ export interface AgentOpInput {
   idempotencyKey?: string;
 }
 
+// ---- WS-4 P2P USDT marketplace (BigInt fields arrive as strings) ----
+export interface P2PPaymentMethod {
+  type: string;
+  label: string;
+  account: string;
+}
+
+export type P2POfferStatus = 'active' | 'closed';
+export type P2POrderStatus = 'created' | 'payment_submitted' | 'released' | 'cancelled' | 'disputed';
+
+export interface P2POffer {
+  id: string;
+  merchantId: string;
+  asset: Currency;
+  fiatCurrency: Currency;
+  pricePerUnit: string;
+  totalMinor: string;
+  remainingMinor: string;
+  methods: P2PPaymentMethod[];
+  status: P2POfferStatus;
+  createdAt: string;
+}
+
+export interface P2POrder {
+  id: string;
+  offerId: string;
+  merchantId: string;
+  buyerId: string;
+  asset: Currency;
+  assetMinor: string;
+  commissionMinor: string;
+  netToBuyerMinor: string;
+  fiatCurrency: Currency;
+  fiatMinor: string;
+  pricePerUnit: string;
+  method: P2PPaymentMethod;
+  status: P2POrderStatus;
+  proofRef: string | null;
+  disputeReason: string | null;
+  timeoutAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOfferInput {
+  fiatCurrency: Currency;
+  pricePerUnit: string;
+  amount: string; // USDT
+  methods: P2PPaymentMethod[];
+}
+
 export type ApiErrorCode =
   | 'UNAUTHORIZED'
   | 'INVALID_OTP'

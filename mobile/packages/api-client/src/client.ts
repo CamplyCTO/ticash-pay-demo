@@ -6,8 +6,11 @@ import {
   type AirtimeProduct,
   type ApiErrorCode,
   type AuthTokens,
+  type CreateOfferInput,
   type KycLimit,
   type Me,
+  type P2POffer,
+  type P2POrder,
   type PublicUser,
   type RateQuote,
   type SendTransferInput,
@@ -95,6 +98,41 @@ export class TicashApi {
   }
   agentCashOut(input: AgentOpInput): Promise<{ transactionUid?: string; [k: string]: unknown }> {
     return this.request('POST', '/app/agent/cash-out', { auth: true, body: input });
+  }
+
+  // P2P USDT marketplace: browse/list offers, order, pay, release, dispute.
+  p2pOffers(): Promise<P2POffer[]> {
+    return this.request('GET', '/app/p2p/offers', { auth: true });
+  }
+  p2pMyOffers(): Promise<P2POffer[]> {
+    return this.request('GET', '/app/p2p/offers/mine', { auth: true });
+  }
+  p2pCreateOffer(input: CreateOfferInput): Promise<P2POffer> {
+    return this.request('POST', '/app/p2p/offers', { auth: true, body: input });
+  }
+  p2pCloseOffer(id: string): Promise<P2POffer> {
+    return this.request('POST', `/app/p2p/offers/${id}/close`, { auth: true, body: {} });
+  }
+  p2pOpenOrder(input: { offerId: string; amount: string; methodType?: string }): Promise<P2POrder> {
+    return this.request('POST', '/app/p2p/orders', { auth: true, body: input });
+  }
+  p2pMyOrders(role?: 'buyer' | 'seller'): Promise<P2POrder[]> {
+    return this.request('GET', `/app/p2p/orders${role ? `?role=${role}` : ''}`, { auth: true });
+  }
+  p2pOrder(id: string): Promise<P2POrder> {
+    return this.request('GET', `/app/p2p/orders/${id}`, { auth: true });
+  }
+  p2pPay(id: string, proofRef: string): Promise<P2POrder> {
+    return this.request('POST', `/app/p2p/orders/${id}/pay`, { auth: true, body: { proofRef } });
+  }
+  p2pRelease(id: string): Promise<P2POrder> {
+    return this.request('POST', `/app/p2p/orders/${id}/release`, { auth: true, body: {} });
+  }
+  p2pCancel(id: string): Promise<P2POrder> {
+    return this.request('POST', `/app/p2p/orders/${id}/cancel`, { auth: true, body: {} });
+  }
+  p2pDispute(id: string, reason: string): Promise<P2POrder> {
+    return this.request('POST', `/app/p2p/orders/${id}/dispute`, { auth: true, body: { reason } });
   }
 
   // Push notifications: register / opt-out this device.

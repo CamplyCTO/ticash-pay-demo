@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentOpInput, Currency, KycLimit, Me, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
+import type { AgentOpInput, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -98,4 +98,54 @@ export function useAgentCashOut() {
       void qc.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
+}
+
+// ---- P2P USDT marketplace (WS-4) ----
+export function useP2POffers() {
+  const enabled = useAuthed();
+  return useQuery<P2POffer[]>({ queryKey: ['p2p-offers'], queryFn: () => api.p2pOffers(), enabled });
+}
+export function useMyP2POffers() {
+  const enabled = useAuthed();
+  return useQuery<P2POffer[]>({ queryKey: ['p2p-my-offers'], queryFn: () => api.p2pMyOffers(), enabled });
+}
+export function useP2POrders(role?: 'buyer' | 'seller') {
+  const enabled = useAuthed();
+  return useQuery<P2POrder[]>({ queryKey: ['p2p-orders', role ?? 'buyer'], queryFn: () => api.p2pMyOrders(role), enabled });
+}
+
+const invalidateP2P = (qc: ReturnType<typeof useQueryClient>) => {
+  void qc.invalidateQueries({ queryKey: ['p2p-offers'] });
+  void qc.invalidateQueries({ queryKey: ['p2p-my-offers'] });
+  void qc.invalidateQueries({ queryKey: ['p2p-orders'] });
+  void qc.invalidateQueries({ queryKey: ['me'] });
+};
+
+export function useCreateP2POffer() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (input: CreateOfferInput) => api.p2pCreateOffer(input), onSuccess: () => invalidateP2P(qc) });
+}
+export function useCloseP2POffer() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.p2pCloseOffer(id), onSuccess: () => invalidateP2P(qc) });
+}
+export function useOpenP2POrder() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (input: { offerId: string; amount: string; methodType?: string }) => api.p2pOpenOrder(input), onSuccess: () => invalidateP2P(qc) });
+}
+export function useP2PPay() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (input: { id: string; proofRef: string }) => api.p2pPay(input.id, input.proofRef), onSuccess: () => invalidateP2P(qc) });
+}
+export function useReleaseP2POrder() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.p2pRelease(id), onSuccess: () => invalidateP2P(qc) });
+}
+export function useCancelP2POrder() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.p2pCancel(id), onSuccess: () => invalidateP2P(qc) });
+}
+export function useDisputeP2POrder() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (input: { id: string; reason: string }) => api.p2pDispute(input.id, input.reason), onSuccess: () => invalidateP2P(qc) });
 }

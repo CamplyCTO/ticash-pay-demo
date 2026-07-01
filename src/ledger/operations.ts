@@ -25,6 +25,10 @@ export function systemAccount(
 ): AccountSpec {
   return { ownerType: 'system', ownerId: null, kind, currency };
 }
+/** A P2P seller's escrow account (holds their listed USDT while offers are open). */
+export function p2pEscrow(merchantId: string, currency: Currency): AccountSpec {
+  return { ownerType: 'customer', ownerId: merchantId, kind: 'p2p_escrow', currency };
+}
 
 function credit(account: AccountSpec, amountMinor: bigint): PostingDraft {
   return { account, currency: account.currency, amountMinor };
@@ -407,5 +411,75 @@ export function settlePayout(args: {
     correlationId: args.correlationId,
     externalRef: args.externalRef,
     postings,
+  };
+}
+
+// ---- P2P USDT escrow -------------------------------------------------------
+
+/** Seller lists USDT for sale: move it from their wallet into P2P escrow (locked). */
+export function p2pLock(args: {
+  merchantId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  correlationId?: string;
+}): JournalDraft {
+  const { merchantId, currency, amountMinor } = args;
+  return {
+    type: 'p2p_lock',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.correlationId ? { correlationId: args.correlationId } : {}),
+    postings: [
+      debit(customerWallet(merchantId, currency), amountMinor), // wallet -> escrow
+      credit(p2pEscrow(merchantId, currency), amountMinor),
+    ],
+  };
+}
+
+/**
+ * Release escrowed USDT to the buyer once the seller confirms the off-platform
+ * payment. The platform commission is taken from the escrowed amount:
+ *   escrow(amount) -> buyer(amount - commission) + fee_revenue(commission)   ⇒ nets 0.
+ * No commission ⇒ escrow -> buyer only.
+ */
+export function p2pRelease(args: {
+  merchantId: string;
+  buyerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  commissionMinor: bigint;
+  idempotencyKey: string;
+  correlationId?: string;
+}): JournalDraft {
+  const { merchantId, buyerId, currency, amountMinor, commissionMinor } = args;
+  const net = amountMinor - commissionMinor;
+  const postings: PostingDraft[] = [debit(p2pEscrow(merchantId, currency), amountMinor)];
+  if (net > 0n) postings.push(credit(customerWallet(buyerId, currency), net));
+  if (commissionMinor > 0n) postings.push(credit(systemAccount('fee_revenue', currency), commissionMinor));
+  return {
+    type: 'p2p_release',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.correlationId ? { correlationId: args.correlationId } : {}),
+    postings,
+  };
+}
+
+/** Return un-sold escrow to the seller (e.g. when they close an offer). escrow -> wallet. */
+export function p2pUnlock(args: {
+  merchantId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  correlationId?: string;
+}): JournalDraft {
+  const { merchantId, currency, amountMinor } = args;
+  return {
+    type: 'p2p_unlock',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.correlationId ? { correlationId: args.correlationId } : {}),
+    postings: [
+      debit(p2pEscrow(merchantId, currency), amountMinor), // escrow -> wallet
+      credit(customerWallet(merchantId, currency), amountMinor),
+    ],
   };
 }

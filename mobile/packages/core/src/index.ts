@@ -15,6 +15,16 @@ export {
   useLookupCustomer,
   useAgentCashIn,
   useAgentCashOut,
+  useP2POffers,
+  useMyP2POffers,
+  useP2POrders,
+  useCreateP2POffer,
+  useCloseP2POffer,
+  useOpenP2POrder,
+  useP2PPay,
+  useReleaseP2POrder,
+  useCancelP2POrder,
+  useDisputeP2POrder,
 } from './query';
 export { AppProviders } from './AppProviders';
 export { usePushNotifications, PushBridge } from './push';

@@ -124,6 +124,14 @@
       </div>
 
       <div class="panel">
+        <h2>🪙 P2P USDT · ordens (atenção)</h2>
+        <div class="body" style="max-height:260px; overflow:auto">
+          <table><thead><tr><th>ordem</th><th>comprador</th><th class="num">USDT</th><th>status</th><th>método</th></tr></thead><tbody id="p2porders"></tbody></table>
+          <div class="muted" style="margin-top:8px">Ordens <b>disputed</b> / <b>payment_submitted</b>. Confira o comprovante e use <b>Resolver ordem P2P</b> — <b>release</b> libera o USDT ao comprador, <b>cancel</b> devolve a reserva ao vendedor. Deposite USDT ao vendedor em <b>Depositar USDT</b>.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <h2>💱 Taxas de câmbio (FX)</h2>
         <div class="body" style="max-height:220px; overflow:auto">
           <table><thead><tr><th>par</th><th class="num">média</th><th class="num">sua margem</th><th class="num">sua taxa</th><th class="num">taxa deles</th><th class="num">cliente recebe / R$100</th></tr></thead><tbody id="fxrates"></tbody></table>
@@ -222,6 +230,18 @@ async function refresh() {
         <td class="num db">${(r.providerFeeBps/100).toFixed(2)}%</td>
         <td class="num cr">${net.toFixed(2)} ${r.toCurrency}</td></tr>`; }).join('') || '<tr><td colspan=6 class="muted">sem taxas</td></tr>';
     } catch (_) { /* fx not wired */ }
+
+    // P2P USDT orders needing attention (submitted + disputed).
+    try {
+      const orders = await api('GET','/p2p/orders');
+      const ost = (s) => ({disputed:'red',payment_submitted:'amber',released:'em',cancelled:'gray',created:'blue'}[s] || 'gray');
+      $('p2porders').innerHTML = orders.map(o => `<tr>
+        <td class="mono" style="font-size:9px">${o.id}</td>
+        <td class="muted">${o.buyerId}</td>
+        <td class="num">${(Number(o.assetMinor)/1e6).toFixed(2)}</td>
+        <td><span class="chip ${ost(o.status)}">${o.status}</span></td>
+        <td class="muted">${(o.method && o.method.label) || '-'}</td></tr>`).join('') || '<tr><td colspan=5 class="muted">nenhuma ordem pendente</td></tr>';
+    } catch (_) { /* p2p not wired */ }
   } catch (e) {
     $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';
     toast(e.message, true);
@@ -236,6 +256,8 @@ const FORMS = {
   'Registrar cliente': { fields:[['externalId','id do cliente']], run:(v)=>api('POST','/customers',{externalId:v.externalId}) },
   'Registrar agente': { fields:[['externalId','id do agente'],['floatLimit','limite (R$)'],['commission','comissão % (ex: 0,75)']], run:(v)=>{ const bps = pctToBps(v.commission); if (bps > 1000) throw new Error('Comissão máxima é 10%'); return api('POST','/agents',{externalId:v.externalId, floatLimit:v.floatLimit||'0', commissionBps: bps}); } },
   'Comissão do agente': { fields:[['externalId','agente'],['commission','comissão % (ex: 0,75)']], run:(v)=>{ const bps = pctToBps(v.commission); if (bps > 1000) throw new Error('Comissão máxima é 10%'); return api('POST',`/agents/${v.externalId}/commission`,{commissionBps: bps}); } },
+  'Depositar USDT (merchant)': { fields:[['customerId','merchant (id)'],['amount','USDT (ex: 100)']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:'USDT',amount:v.amount,idempotencyKey:idem()}) },
+  'Resolver ordem P2P': { fields:[['orderId','id da ordem'],['action','release ou cancel']], run: async (v)=>{ const r = await api('POST',`/p2p/orders/${v.orderId}/resolve`,{action:v.action}); toast('✓ Ordem '+r.status); return r; } },
   'KYC': { fields:[['externalId','cliente'],['status','approved/pending/review/rejected']], run:(v)=>api('POST',`/customers/${v.externalId}/kyc`,{level:v.status==='approved'?2:1,status:v.status}) },
   'Fund wallet': { fields:[['customerId','cliente'],['amount','valor (R$)']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:'BRL',amount:v.amount,idempotencyKey:idem()}) },
   'Cobrança PIX (entrada)': { fields:[['customerId','cliente'],['amount','valor (R$)'],['name','nome do pagador'],['cpfCnpj','CPF (só números)']], run: async (v)=>{ const r = await api('POST','/payments/charge',{customerId:v.customerId,amount:v.amount,methods:['pix'],payer:{name:v.name,cpfCnpj:v.cpfCnpj}}); if (r.pix && r.pix.copyPaste) window.prompt('PIX copia-e-cola (sandbox) — a carteira é creditada quando o pagamento liquidar (webhook):', r.pix.copyPaste); return r; } },

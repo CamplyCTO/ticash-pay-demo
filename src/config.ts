@@ -92,6 +92,16 @@ export const config = {
       global: { max: Number(process.env.RL_GLOBAL_MAX ?? 1200), windowMs: Number(process.env.RL_GLOBAL_WINDOW_MS ?? 60000) },
     },
   },
+  /** P2P USDT escrow marketplace (Phase 3 WS-4). Always on; the on/off-ramp
+   *  (NOWPayments) that funds/withdraws USDT is wired separately once keyed. */
+  p2p: {
+    asset: 'USDT' as const,
+    /** Platform commission on each trade (basis points; 200 = 2%). */
+    commissionBps: Number(process.env.P2P_COMMISSION_BPS ?? 200),
+    /** After the buyer submits payment, how long the seller has to confirm before
+     *  the order can be escalated to the admin (central). Minutes. */
+    confirmWindowMinutes: Number(process.env.P2P_CONFIRM_WINDOW_MIN ?? 30),
+  },
   /** Push notifications (Phase 3 WS-5). On by default; uses Expo's push API. */
   push: {
     enabled: (process.env.PUSH ?? 'on') !== 'off',

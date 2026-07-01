@@ -165,6 +165,32 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // ---- P2P marketplace: admin (central) oversight + dispute resolution -----
+  if (deps.p2p) {
+    const p2p = deps.p2p.service;
+    // All offers (active shown to the panel) + orders by status for monitoring.
+    app.get('/p2p/offers', async () => p2p.listActiveOffers());
+    app.get('/p2p/orders', async (req) => {
+      const q = z.object({ status: z.enum(['created', 'payment_submitted', 'released', 'cancelled', 'disputed']).optional() }).parse(req.query);
+      // Default view: everything needing attention (submitted + disputed).
+      if (!q.status) {
+        const [submitted, disputed] = await Promise.all([p2p.listOrdersByStatus('payment_submitted'), p2p.listOrdersByStatus('disputed')]);
+        return [...disputed, ...submitted];
+      }
+      return p2p.listOrdersByStatus(q.status);
+    });
+    // Submitted orders past their confirm window — the central can step in.
+    app.get('/p2p/orders/expired', async () => p2p.listExpired());
+    // Resolve a disputed or stuck order: release the USDT to the buyer, or cancel.
+    app.post('/p2p/orders/:id/resolve', async (req) => {
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const b = z.object({ action: z.enum(['release', 'cancel']) }).parse(req.body);
+      const order = await p2p.adminResolve({ orderId: p.id, action: b.action });
+      if (b.action === 'release' && deps.push) void deps.push.service.notifyMoneyIn(order.buyerId, order.asset, order.netToBuyerMinor).catch(() => {});
+      return order;
+    });
+  }
+
   // ---- FX rates (mid + margin -> locked customer rate) --------------------
   if (deps.fx) {
     const fx = deps.fx.service;
