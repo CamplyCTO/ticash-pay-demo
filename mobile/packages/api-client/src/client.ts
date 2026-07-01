@@ -135,6 +135,12 @@ export class TicashApi {
     return this.request('POST', `/app/p2p/orders/${id}/dispute`, { auth: true, body: { reason } });
   }
 
+  // USDT deposit (NOWPayments on-ramp): create a crypto payment; the returned
+  // address is where the user sends USDT. Their wallet is credited on settlement.
+  usdtDeposit(amount: string): Promise<{ paymentId: string; payAddress: string; payAmount: string; payCurrency: string; status: string }> {
+    return this.request('POST', '/app/usdt/deposit', { auth: true, body: { amount } });
+  }
+
   // Push notifications: register / opt-out this device.
   registerPush(expoToken: string, platform?: string): Promise<{ ok: true }> {
     return this.request('POST', '/app/push/register', { auth: true, body: platform ? { expoToken, platform } : { expoToken } });

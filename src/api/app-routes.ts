@@ -322,6 +322,24 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     });
   }
 
+  // ---- USDT deposit (NOWPayments on-ramp): fund your own USDT wallet -------
+  if (deps.deposits) {
+    const dep = deps.deposits;
+    app.post('/app/usdt/deposit', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z.object({ amount: amountSchema }).parse(req.body); // USDT
+      const amountMinor = money(b.amount, 'USDT');
+      if (amountMinor <= 0n) throw new RegistryError('amount must be positive', 'VALIDATION');
+      const orderId = `dep-${me.externalId}-${randomUUID()}`;
+      const created = await dep.gateway.createDeposit({ amountMinor, orderId, callbackUrl: dep.callbackUrl });
+      // Record the intent BEFORE returning: the wallet is funded on settlement by
+      // looking this up, crediting the RECORDED amount (never the webhook's).
+      await dep.intents.create({ providerId: created.paymentId, provider: dep.gateway.name, customerId: me.externalId, currency: 'USDT', amountMinor, reference: orderId });
+      reply.status(201);
+      return { paymentId: created.paymentId, payAddress: created.payAddress, payAmount: created.payAmount, payCurrency: created.payCurrency, status: created.status };
+    });
+  }
+
   // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
   if (deps.airtime) {
     const air = deps.airtime.service;

@@ -92,6 +92,18 @@ export const config = {
       global: { max: Number(process.env.RL_GLOBAL_MAX ?? 1200), windowMs: Number(process.env.RL_GLOBAL_WINDOW_MS ?? 60000) },
     },
   },
+  /** NOWPayments USDT on-ramp (deposit). Enabled when an API key is present.
+   *  Users create a crypto payment, send USDT to the address, and the signed IPN
+   *  webhook credits their USDT wallet. Withdrawal (payout) is a later addition. */
+  nowpayments: {
+    enabled: !!process.env.NOWPAYMENTS_API_KEY,
+    apiBase: process.env.NOWPAYMENTS_BASE ?? 'https://api.nowpayments.io/v1',
+    apiKey: process.env.NOWPAYMENTS_API_KEY ?? '',
+    ipnSecret: process.env.NOWPAYMENTS_IPN_SECRET ?? '',
+    payCurrency: process.env.NOWPAYMENTS_PAY_CURRENCY ?? 'usdttrc20', // USDT on Tron (low fee)
+    priceCurrency: process.env.NOWPAYMENTS_PRICE_CURRENCY ?? 'usd', // USDT ≈ USD
+    callbackUrl: process.env.NOWPAYMENTS_CALLBACK_URL ?? '', // public /webhooks/nowpayments
+  },
   /** P2P USDT escrow marketplace (Phase 3 WS-4). Always on; the on/off-ramp
    *  (NOWPayments) that funds/withdraws USDT is wired separately once keyed. */
   p2p: {

@@ -191,6 +191,54 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // ---- USDT deposit settlement (NOWPayments IPN) --------------------------
+  if (deps.deposits) {
+    const dep = deps.deposits;
+    app.get('/deposits/intents', async () => dep.intents.list());
+    // IPN callback: authenticated by the NOWPayments HMAC signature, NOT Basic
+    // Auth (the /webhooks/* path is exempted by the onRequest hook in server.ts).
+    app.post('/webhooks/nowpayments', async (req, reply) => {
+      const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? '';
+      const sig = req.headers['x-nowpayments-sig'] as string | undefined;
+      const ipn = dep.gateway.parseIpn(rawBody, sig);
+      if (!ipn) {
+        reply.status(401);
+        return { error: 'invalid signature' };
+      }
+      // Edge idempotency: a redelivered event is acknowledged without reprocessing.
+      const eventUid = `${ipn.status}:${ipn.paymentId}`;
+      if (await dep.events.seen(dep.gateway.name, eventUid)) return { ok: true, duplicate: true };
+
+      let result: Record<string, unknown>;
+      if (!ipn.finished) {
+        result = { ok: true, ignored: ipn.status }; // waiting/confirming/partially_paid/... don't credit
+      } else {
+        const intent = await dep.intents.get(ipn.paymentId);
+        if (!intent) {
+          req.log.warn({ paymentId: ipn.paymentId }, 'nowpayments IPN for unknown deposit');
+          result = { ok: true, unmatched: ipn.paymentId };
+        } else if (intent.status === 'paid') {
+          result = { ok: true, alreadyCredited: ipn.paymentId };
+        } else {
+          // Credit the RECORDED amount, idempotent by provider payment id.
+          const posted = await ledger.fundWallet({
+            customerId: intent.customerId,
+            currency: intent.currency,
+            amountMinor: intent.amountMinor,
+            idempotencyKey: `nowpayments:${ipn.paymentId}`,
+            externalRef: ipn.paymentId,
+          });
+          await dep.intents.markPaid(ipn.paymentId);
+          if (deps.push) void deps.push.service.notifyMoneyIn(intent.customerId, intent.currency, intent.amountMinor).catch(() => { /* best-effort */ });
+          req.log.info({ audit: 'usdt.deposit', paymentId: ipn.paymentId, customerId: intent.customerId, amountMinor: intent.amountMinor.toString(), actuallyPaid: ipn.actuallyPaid ?? null }, 'usdt deposit credited');
+          result = { ok: true, transactionUid: posted.transactionUid };
+        }
+      }
+      await dep.events.record(dep.gateway.name, eventUid, ipn.status, ipn.raw);
+      return result;
+    });
+  }
+
   // ---- FX rates (mid + margin -> locked customer rate) --------------------
   if (deps.fx) {
     const fx = deps.fx.service;

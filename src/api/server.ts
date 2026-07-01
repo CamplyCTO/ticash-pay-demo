@@ -44,6 +44,7 @@ import { ConsoleOtpSender } from '../auth/otp-sender';
 import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
+import { NowPaymentsAdapter } from '../deposits/nowpayments-adapter';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
 import { applySecurity, assertSecureConfig } from './security';
@@ -53,6 +54,8 @@ export interface ServerDeps {
   registry: RegistryStore;
   /** Money-in (Lytex) — present only when a gateway is configured. */
   payments?: { gateway: PaymentInPort; intents: PaymentIntentStore; events: ProviderEventStore };
+  /** USDT on-ramp (NOWPayments) — present only when an API key is configured. */
+  deposits?: { gateway: NowPaymentsAdapter; intents: PaymentIntentStore; events: ProviderEventStore; callbackUrl: string };
   /** Money-out (MonCash) — present only when a payout rail is configured. */
   payouts?: { service: PayoutService };
   /** Crash-safe transfer saga. Always wired by defaultDeps; optional for tests. */
@@ -125,6 +128,10 @@ export function defaultDeps(): ServerDeps {
   // P2P USDT escrow marketplace — always available (the NOWPayments on/off-ramp
   // that funds/withdraws USDT is wired separately once the client provides keys).
   deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p) };
+  // USDT on-ramp (NOWPayments) — enabled once the API key is present.
+  if (config.nowpayments.enabled) {
+    deps.deposits = { gateway: new NowPaymentsAdapter(config.nowpayments), intents: createPaymentIntentStore(), events: createProviderEventStore(), callbackUrl: config.nowpayments.callbackUrl };
+  }
   return deps;
 }
 
