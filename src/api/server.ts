@@ -40,7 +40,8 @@ import { PayoutService } from '../payouts/payout-service';
 import { ProviderFeeReconciliation } from '../payouts/reconciliation';
 import { TransferService } from '../transfers/transfer-service';
 import { AuthService } from '../auth/auth-service';
-import { ConsoleOtpSender } from '../auth/otp-sender';
+import { ConsoleOtpSender, OtpSender } from '../auth/otp-sender';
+import { TwilioOtpSender } from '../auth/twilio-otp-sender';
 import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
@@ -119,7 +120,10 @@ export function defaultDeps(): ServerDeps {
   // End-user auth is always available; the OTP sender is pluggable (console for now,
   // a real SMS gateway once the client picks one — same port pattern as the providers).
   const authStore = createAuthStore();
-  deps.auth = { service: new AuthService(authStore, deps.registry, new ConsoleOtpSender(), config.auth) };
+  const otpSender: OtpSender = config.sms.twilio.enabled
+    ? new TwilioOtpSender(config.sms.twilio)
+    : new ConsoleOtpSender();
+  deps.auth = { service: new AuthService(authStore, deps.registry, otpSender, config.auth) };
   // Push: device registry + dispatch (shares the auth store to resolve party -> users).
   if (config.push.enabled) {
     const sender = new ExpoPushSender(config.push.expoAccessToken ? { accessToken: config.push.expoAccessToken } : {});

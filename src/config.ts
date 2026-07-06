@@ -122,6 +122,19 @@ export const config = {
     enabled: (process.env.PUSH ?? 'on') !== 'off',
     expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? '', // optional (enhanced security)
   },
+  /** SMS delivery for login OTP. Twilio enabled when an Account SID is present;
+   *  otherwise the console sender logs the code (dev / pre-gateway). The client
+   *  creates the Twilio account and sends the SID + Auth Token (same as the other
+   *  providers); we set TWILIO_* env vars and real SMS turns on with no code change. */
+  sms: {
+    twilio: {
+      enabled: !!process.env.TWILIO_ACCOUNT_SID,
+      accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+      authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+      from: process.env.TWILIO_FROM ?? '',
+      messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID ?? '',
+    },
+  },
   /** End-user auth for the mobile apps (Phase 3 WS-0). Always on; OTP sender is pluggable. */
   auth: {
     jwtSecret: process.env.AUTH_JWT_SECRET ?? 'dev-insecure-secret-change-me',
