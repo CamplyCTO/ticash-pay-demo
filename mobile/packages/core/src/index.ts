@@ -1,4 +1,4 @@
-export { API_BASE_URL } from './config';
+export { API_BASE_URL, FEATURE_USDT } from './config';
 export { api } from './client';
 export { secureStorage, STORAGE_KEYS } from './storage';
 export { useAuthStore, type AuthStatus } from './auth-store';

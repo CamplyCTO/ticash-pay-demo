@@ -5,15 +5,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { Balance, Card, Chip, EmptyState, Logo, Row, Screen, Skeleton, Text, useTheme, useToast } from '@ticash/ui';
 import { formatMoneyParts, isCustomerMe, type Currency } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
-import { useMe } from '@ticash/core';
+import { useMe, FEATURE_USDT } from '@ticash/core';
 
 type ActionKey = 'send' | 'receive' | 'topup' | 'usdt';
-const ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
+const ALL_ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
   { key: 'send', icon: 'arrow-up', route: '/(app)/send' },
   { key: 'receive', icon: 'arrow-down', route: '/(app)/receive' },
   { key: 'topup', icon: 'phone-portrait-outline', route: '/(app)/topup' },
-  { key: 'usdt', icon: 'logo-bitcoin' }, // WS-4
+  { key: 'usdt', icon: 'logo-bitcoin' }, // WS-4 — hidden in v1 (FEATURE_USDT)
 ];
+// v1 store build hides the USDT action; re-enabled by FEATURE_USDT for v2.
+const ACTIONS = ALL_ACTIONS.filter((a) => a.key !== 'usdt' || FEATURE_USDT);
 
 export function HomeScreen() {
   const t = useTheme();
