@@ -42,6 +42,13 @@
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "17759c98-8041-432d-be5e-405706c7eed1"
+      }
+    },
+    "owner": "camplyia"
   }
 }
