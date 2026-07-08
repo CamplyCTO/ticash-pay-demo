@@ -133,6 +133,17 @@ export const config = {
       authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
       from: process.env.TWILIO_FROM ?? '',
       messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID ?? '',
+      /** Twilio Verify (preferred): provider-managed OTP over WhatsApp + SMS with
+       *  Brazil-compliant routing. Enabled when a Verify Service SID (VA…) is set;
+       *  it then takes over from the raw-SMS sender. Channels are tried in order. */
+      verify: {
+        enabled: !!process.env.TWILIO_VERIFY_SERVICE_SID,
+        serviceSid: process.env.TWILIO_VERIFY_SERVICE_SID ?? '',
+        channels: (process.env.TWILIO_VERIFY_CHANNELS ?? 'sms')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      },
     },
   },
   /** End-user auth for the mobile apps (Phase 3 WS-0). Always on; OTP sender is pluggable. */

@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { RegistryError, RegistryStore } from '../registry/store';
 import { AuthError, AuthStore } from './auth-store';
 import { OtpSender } from './otp-sender';
+import { Verifier } from './verifier';
 import { JwtClaims, newOtpCode, newRefreshToken, sha256Hex, signAccessToken, verifyAccessToken } from './tokens';
 import { AppUser } from './types';
 
@@ -47,6 +48,9 @@ export class AuthService {
     private readonly sender: OtpSender,
     private readonly cfg: AuthConfig,
     private readonly now: () => number = () => Date.now(),
+    /** When set (Twilio Verify), OTP send + check is delegated to the provider and
+     *  the local generate/store/consume path is bypassed. App flow is unchanged. */
+    private readonly verifier?: Verifier,
   ) {}
 
   /** Customer self-signup: create the party + login, then send the first OTP. */
@@ -90,7 +94,9 @@ export class AuthService {
     const user = await this.store.getUserByPhone(args.phone);
     if (!user) throw new AuthError(`no account for ${args.phone}`, 'NOT_FOUND');
     if (user.status === 'blocked') throw new AuthError('account is blocked', 'FORBIDDEN');
-    const ok = await this.store.consumeOtp(args.phone, sha256Hex(args.code), this.iso(this.now()));
+    const ok = this.verifier
+      ? await this.verifier.check(args.phone, args.code)
+      : await this.store.consumeOtp(args.phone, sha256Hex(args.code), this.iso(this.now()));
     if (!ok) throw new AuthError('invalid or expired code', 'INVALID_OTP');
     return this.startSession(user, args.device);
   }
@@ -171,6 +177,12 @@ export class AuthService {
   }
 
   private async issueOtp(phone: string, purpose: string): Promise<void> {
+    // Provider-managed path (Twilio Verify): it generates + sends the code and
+    // enforces its own per-number rate limiting, so we don't store/send locally.
+    if (this.verifier) {
+      await this.verifier.start(phone, purpose);
+      return;
+    }
     const since = this.iso(this.now() - 3_600_000);
     if ((await this.store.countOtpsSince(phone, since)) >= this.cfg.otpMaxPerHour) {
       throw new AuthError('too many code requests; try again later', 'RATE_LIMITED');

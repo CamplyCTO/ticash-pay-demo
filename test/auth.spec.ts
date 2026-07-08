@@ -3,6 +3,7 @@ import { InMemoryAuthStore } from '../src/auth/in-memory-auth-store';
 import { InMemoryRegistryStore } from '../src/registry/in-memory-registry';
 import { AuthService, AuthConfig } from '../src/auth/auth-service';
 import { OtpSender } from '../src/auth/otp-sender';
+import { Verifier } from '../src/auth/verifier';
 import { verifyAccessToken } from '../src/auth/tokens';
 
 const CFG: AuthConfig = {
@@ -168,5 +169,52 @@ describe('AuthService — blocked users', () => {
     const blocked = await store.getUserById(user.id);
     (blocked as { status: string }).status = 'blocked';
     await expect(svc.verifyOtp({ phone: '+550008', code })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+describe('AuthService — provider-managed OTP (Twilio Verify branch)', () => {
+  /** Fake Verifier: records sends, approves a single expected code. */
+  class FakeVerifier implements Verifier {
+    readonly name = 'fake-verify';
+    starts: { phone: string; purpose: string }[] = [];
+    constructor(private readonly expectedCode = '424242') {}
+    async start(phone: string, purpose: string) {
+      this.starts.push({ phone, purpose });
+      return { channel: 'sms' };
+    }
+    async check(_phone: string, code: string) {
+      return code === this.expectedCode;
+    }
+  }
+
+  function buildWithVerifier() {
+    const store = new InMemoryAuthStore();
+    const registry = new InMemoryRegistryStore();
+    const sender = new CapturingSender();
+    const verifier = new FakeVerifier();
+    const svc = new AuthService(store, registry, sender, CFG, () => Date.UTC(2026, 0, 1), verifier);
+    return { store, registry, sender, verifier, svc };
+  }
+
+  it('delegates send to the verifier and never touches the local OTP sender/store', async () => {
+    const { svc, sender, verifier, store } = buildWithVerifier();
+    const { user } = await svc.registerCustomer({ phone: '+5511988887777' });
+
+    // Verify was asked to send; the local SMS sender was NOT used.
+    expect(verifier.starts).toEqual([{ phone: '+5511988887777', purpose: 'signup' }]);
+    expect(sender.last).toBeNull();
+    // No local OTP row was written (the provider owns the code).
+    expect(await store.countOtpsSince('+5511988887777', new Date(0).toISOString())).toBe(0);
+    expect(user.role).toBe('customer');
+  });
+
+  it('logs in when the verifier approves the code, and rejects a wrong code', async () => {
+    const { svc } = buildWithVerifier();
+    await svc.registerCustomer({ phone: '+5511988887777' });
+
+    await expect(svc.verifyOtp({ phone: '+5511988887777', code: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });
+    const tokens = await svc.verifyOtp({ phone: '+5511988887777', code: '424242' });
+    expect(tokens.accessToken).toBeTruthy();
+    expect(tokens.user.phone).toBe('+5511988887777');
   });
 });

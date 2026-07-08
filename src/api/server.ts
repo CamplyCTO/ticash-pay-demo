@@ -42,6 +42,7 @@ import { TransferService } from '../transfers/transfer-service';
 import { AuthService } from '../auth/auth-service';
 import { ConsoleOtpSender, OtpSender } from '../auth/otp-sender';
 import { TwilioOtpSender } from '../auth/twilio-otp-sender';
+import { TwilioVerifier, Verifier, VerifyChannel } from '../auth/verifier';
 import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
@@ -120,10 +121,22 @@ export function defaultDeps(): ServerDeps {
   // End-user auth is always available; the OTP sender is pluggable (console for now,
   // a real SMS gateway once the client picks one — same port pattern as the providers).
   const authStore = createAuthStore();
-  const otpSender: OtpSender = config.sms.twilio.enabled
-    ? new TwilioOtpSender(config.sms.twilio)
-    : new ConsoleOtpSender();
-  deps.auth = { service: new AuthService(authStore, deps.registry, otpSender, config.auth) };
+  // Twilio Verify (WhatsApp + SMS, Brazil-compliant) takes over OTP when its Service
+  // SID is set; otherwise fall back to the raw-SMS sender (Twilio if keyed, else console).
+  const verifier: Verifier | undefined = config.sms.twilio.verify.enabled
+    ? new TwilioVerifier({
+        accountSid: config.sms.twilio.accountSid,
+        authToken: config.sms.twilio.authToken,
+        serviceSid: config.sms.twilio.verify.serviceSid,
+        channels: config.sms.twilio.verify.channels as VerifyChannel[],
+      })
+    : undefined;
+  const otpSender: OtpSender = verifier
+    ? new ConsoleOtpSender() // unused when Verify is active
+    : config.sms.twilio.enabled
+      ? new TwilioOtpSender(config.sms.twilio)
+      : new ConsoleOtpSender();
+  deps.auth = { service: new AuthService(authStore, deps.registry, otpSender, config.auth, undefined, verifier) };
   // Push: device registry + dispatch (shares the auth store to resolve party -> users).
   if (config.push.enabled) {
     const sender = new ExpoPushSender(config.push.expoAccessToken ? { accessToken: config.push.expoAccessToken } : {});
