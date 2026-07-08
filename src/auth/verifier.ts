@@ -50,8 +50,13 @@ export class TwilioVerifier implements Verifier {
 
   async start(phone: string, _purpose: string): Promise<{ channel: string }> {
     let lastErr: Error | null = null;
-    // Try each channel in order: e.g. WhatsApp first, then SMS if WhatsApp is
-    // unreachable for this number (no WhatsApp, sender not yet approved, etc.).
+    // Try each channel in order, advancing ONLY when a send is REJECTED at the API
+    // level (bad channel, WhatsApp sender not provisioned, invalid number, etc.).
+    // ⚠️ A number simply NOT being on WhatsApp does NOT error here — Verify accepts
+    // the send and returns 'pending', so this in-order try does NOT rescue a
+    // non-WhatsApp user. Before enabling the 'whatsapp' channel for real, add a
+    // reliable fallback (Lookup for WhatsApp capability, or a user-triggered
+    // "resend via SMS"); do not rely on this loop for non-delivery fallback.
     for (const channel of this.channels) {
       try {
         await this.post('/Verifications', { To: phone, Channel: channel });
