@@ -14,6 +14,9 @@ import { OtpSender } from '../src/auth/otp-sender';
 import { InMemoryPaymentIntentStore } from '../src/payments/intent-store';
 import { InMemoryProviderEventStore } from '../src/payments/event-store';
 import { PaymentInPort, ChargeRequest, ChargeResult } from '../src/payments/types';
+import { ScreeningService } from '../src/screening/screening-service';
+import { InMemoryScreeningStore } from '../src/screening/hit-store';
+import { DEFAULT_SANCTIONS } from '../src/screening/sanctions-list';
 
 const CFG: AuthConfig = { jwtSecret: 's', accessTtlSec: 900, refreshTtlSec: 3600, otpTtlSec: 300, otpLength: 6, otpMaxPerHour: 50 };
 class CapturingSender implements OtpSender {
@@ -54,6 +57,7 @@ beforeEach(() => {
     fx: { service: rate, store: rateStore },
     transfers: { service: new TransferService(ledger, new InMemoryTransferStore(), undefined, rate) },
     kyc: { limits: new KycLimits(registry, { 0: 500, 1: 5000, 2: 50000 }) },
+    screening: { service: new ScreeningService(DEFAULT_SANCTIONS, new InMemoryScreeningStore(), 0.85) },
     payments: { gateway, intents, events: new InMemoryProviderEventStore() },
   });
 });
@@ -102,6 +106,14 @@ describe('/app/deposit/pix — self-service PIX deposit', () => {
     const { token } = await login('+5511700009002');
     const r = await post('/app/deposit/pix', { amount: '0', payerName: 'Jean', payerCpf: '12345678901' }, { authorization: token });
     expect(r.statusCode).toBeGreaterThanOrEqual(400);
+    expect(gateway.charges).toHaveLength(0);
+  });
+
+  it('blocks a deposit whose PIX payer is on the sanctions list (AML parity)', async () => {
+    const { token } = await login('+5511700009003');
+    const r = await post('/app/deposit/pix', { amount: '100.00', payerName: 'Nicolas Maduro', payerCpf: '12345678901' }, { authorization: token });
+    expect(r.statusCode).toBeGreaterThanOrEqual(400); // FORBIDDEN
+    // Sanctioned funds never reach the gateway.
     expect(gateway.charges).toHaveLength(0);
   });
 });

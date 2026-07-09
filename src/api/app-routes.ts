@@ -357,6 +357,9 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         .parse(req.body);
       const amountMinor = money(b.amount, 'BRL');
       if (amountMinor <= 0n) throw new RegistryError('amount must be positive', 'VALIDATION');
+      // AML: screen the PIX payer against sanctions/PEP — parity with the admin
+      // charge path; sanctioned funds must not enter the platform.
+      if (deps.screening) await deps.screening.service.assertClear(b.payerName.trim(), 'deposit');
       const reference = `dep-pix-${me.externalId}-${randomUUID()}`;
       const charge = await pay.gateway.createCharge({
         customerId: me.externalId,
