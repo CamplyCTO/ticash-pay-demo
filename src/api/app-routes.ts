@@ -6,6 +6,7 @@ import { toMinor } from '../money/money';
 import { customerWallet, agentFloat, agentCommission } from '../ledger/operations';
 import { applyBps } from '../fx/rate-service';
 import { RegistryError } from '../registry/store';
+import type { TransferRecord } from '../transfers/transfer-store';
 import type { ServerDeps } from './server';
 
 const currencySchema = z.string().transform((v) => assertCurrency(v));
@@ -107,6 +108,8 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     const b = z
       .object({
         recipientRef: z.string().min(3),
+        recipientName: z.string().min(1).max(120).optional(),
+        payoutRail: z.enum(['moncash', 'natcash']).optional(),
         fromCurrency: currencySchema,
         toCurrency: currencySchema,
         sendAmount: amountSchema,
@@ -114,8 +117,11 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       })
       .parse(req.body);
     const sendMinor = money(b.sendAmount, b.fromCurrency);
-    // AML on the recipient + KYC tier cap on the sender — same guards as the admin route.
-    if (deps.screening) await deps.screening.service.assertClear(b.recipientRef, 'transfer');
+    // AML on the recipient (name + number) + KYC tier cap on the sender.
+    if (deps.screening) {
+      await deps.screening.service.assertClear(b.recipientRef, 'transfer');
+      if (b.recipientName) await deps.screening.service.assertClear(b.recipientName, 'transfer');
+    }
     if (deps.kyc) await deps.kyc.limits.assertWithinLimit(me.externalId, sendMinor, b.fromCurrency);
     if (!deps.transfers) throw new RegistryError('transfers are not available', 'VALIDATION');
     reply.status(201);
@@ -123,6 +129,8 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     const result = await deps.transfers.service.initiate({
       senderId: me.externalId,
       recipientRef: b.recipientRef,
+      recipientName: b.recipientName ?? null,
+      payoutRail: b.payoutRail ?? null,
       fromCurrency: b.fromCurrency,
       toCurrency: b.toCurrency,
       sendMinor,
@@ -143,10 +151,19 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         deps.ledger.getFeed({ accountKey: `${me.role}:${me.externalId}:${kind}:${ccy}`, limit }),
       ),
     );
-    return perCurrency
-      .flat()
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit);
+    const rows = perCurrency.flat().sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
+    // Enrich the caller's own send rows with recipient name/number/rail/status so the
+    // activity list can show "sent to <name> (<number>) via MonCash · <status>".
+    const byCorr = new Map<string, TransferRecord>();
+    if (me.role === 'customer' && deps.transfers) {
+      for (const t of await deps.transfers.service.history(me.externalId, 200)) byCorr.set(t.correlationId, t);
+    }
+    return rows.map((r) => {
+      const t = r.correlationId ? byCorr.get(r.correlationId) : undefined;
+      return t
+        ? { ...r, recipientName: t.recipientName, recipientRef: t.recipientRef, payoutRail: t.payoutRail, transferStatus: t.status, receiveMinor: t.receiveMinor, toCurrency: t.toCurrency }
+        : r;
+    });
   });
 
   // ---- KYC: limits (always) + start/sync the Sumsub flow (when configured) -

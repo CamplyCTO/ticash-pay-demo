@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, symbolOf, type Currency, type TransferPricing } from '@ticash/api-client';
+import { formatMoneyParts, symbolOf, type Currency, type PayoutRail, type TransferPricing } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
 import { messageForError, useQuote, useSendTransfer } from '@ticash/core';
 
@@ -18,7 +18,11 @@ export function SendScreen() {
   const [amount, setAmount] = useState('');
   const [debounced, setDebounced] = useState('');
   const [recipient, setRecipient] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [rail, setRail] = useState<PayoutRail>('moncash');
   const send = useSendTransfer();
+
+  const railApplies = to === 'HTG'; // MonCash/NatCash are Haiti mobile-money rails
 
   // Stable idempotency key per logical send: same (corridor, amount, recipient) ->
   // same key, so a retry after a lost response can never double-send money. A new
@@ -39,15 +43,17 @@ export function SendScreen() {
   const quote = useQuote(FROM, to, debounced);
   const amountValid = Number(amount) > 0;
   const recipientValid = recipient.trim().length >= 5;
+  const recipientNameValid = recipientName.trim().length >= 2;
   // Only enable once the live quote matches the CURRENT amount (no stale-quote sends).
   const quoteReady = !!quote.data && debounced === amount;
-  const canSend = amountValid && recipientValid && quoteReady && !send.isPending;
+  const canSend = amountValid && recipientValid && recipientNameValid && quoteReady && !send.isPending;
 
   const onSend = () => {
     if (!canSend) return;
-    const sig = `${FROM}|${to}|${amount}|${recipient.trim()}`;
+    const payoutRail = railApplies ? rail : undefined;
+    const sig = `${FROM}|${to}|${amount}|${recipient.trim()}|${recipientName.trim()}|${payoutRail ?? ''}`;
     send.mutate(
-      { recipientRef: recipient.trim(), fromCurrency: FROM, toCurrency: to, sendAmount: amount, idempotencyKey: idemKeyFor(sig) },
+      { recipientRef: recipient.trim(), recipientName: recipientName.trim(), payoutRail, fromCurrency: FROM, toCurrency: to, sendAmount: amount, idempotencyKey: idemKeyFor(sig) },
       { onError: (e) => toast.error(messageForError(e, tr)) },
     );
   };
@@ -57,6 +63,7 @@ export function SendScreen() {
     setAmount('');
     setDebounced('');
     setRecipient('');
+    setRecipientName('');
     idem.current = null;
   };
 
@@ -70,7 +77,7 @@ export function SendScreen() {
           </View>
           <Text variant="title" center>{tr('send.sent')}</Text>
           <Text variant="heading" color="primary">{`${recv.symbol} ${recv.integer},${recv.fraction} ${to}`}</Text>
-          <Text variant="body" color="textMuted" center>{tr('send.toRecipient', { recipient: recipient.trim() })}</Text>
+          <Text variant="body" color="textMuted" center>{tr('send.toRecipient', { recipient: recipientName.trim() || recipient.trim() })}</Text>
         </View>
       </Screen>
     );
@@ -103,13 +110,39 @@ export function SendScreen() {
       />
 
       <Input
+        label={tr('send.recipientName')}
+        value={recipientName}
+        onChangeText={setRecipientName}
+        placeholder={tr('send.recipientNamePlaceholder')}
+        autoCapitalize="words"
+        containerStyle={{ marginBottom: t.spacing(4) }}
+      />
+
+      <Input
         label={tr('send.recipient')}
         value={recipient}
         onChangeText={setRecipient}
         placeholder="50912345678"
         keyboardType="default"
-        containerStyle={{ marginBottom: t.spacing(5) }}
+        containerStyle={{ marginBottom: railApplies ? t.spacing(4) : t.spacing(5) }}
       />
+
+      {/* Haiti payout rail: MonCash / NatCash */}
+      {railApplies ? (
+        <View style={{ marginBottom: t.spacing(5) }}>
+          <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>{tr('send.rail')}</Text>
+          <Row gap={2}>
+            {(['moncash', 'natcash'] as PayoutRail[]).map((r) => {
+              const active = r === rail;
+              return (
+                <Pressable key={r} onPress={() => setRail(r)} style={{ flex: 1, paddingVertical: t.spacing(3), borderRadius: t.radius.md, alignItems: 'center', backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
+                  <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{r === 'moncash' ? 'MonCash' : 'NatCash'}</Text>
+                </Pressable>
+              );
+            })}
+          </Row>
+        </View>
+      ) : null}
 
       {/* Live quote */}
       {amountValid ? (

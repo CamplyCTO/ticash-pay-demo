@@ -5,7 +5,7 @@ import { LedgerService, deriveUuid } from '../ledger/service';
 import { PayoutService } from '../payouts/payout-service';
 import { RateService, applyBps } from '../fx/rate-service';
 import { TransferPricing } from '../fx/types';
-import { NewTransfer, TransferRecord, TransferStore } from './transfer-store';
+import { NewTransfer, PayoutRail, TransferRecord, TransferStore } from './transfer-store';
 
 /**
  * Orchestrates a cross-currency transfer as a crash-safe saga. `initiate` persists
@@ -29,6 +29,8 @@ export class TransferService {
   async initiate(args: {
     senderId: string;
     recipientRef: string;
+    recipientName?: string | null;
+    payoutRail?: PayoutRail | null;
     fromCurrency: Currency;
     toCurrency: Currency;
     sendMinor: bigint;
@@ -56,6 +58,8 @@ export class TransferService {
       baseIdempotencyKey: args.idempotencyKey,
       senderId: args.senderId,
       recipientRef: args.recipientRef,
+      recipientName: args.recipientName ?? null,
+      payoutRail: args.payoutRail ?? null,
       fromCurrency: args.fromCurrency,
       toCurrency: args.toCurrency,
       sendMinor: args.sendMinor,
@@ -69,6 +73,11 @@ export class TransferService {
     const created = await this.store.create(intent);
     const record = await this.run(correlationId);
     return { correlationId, quote: quoteFrom(created), status: record.status };
+  }
+
+  /** The caller's own transfers, newest first — enriches the app's activity history. */
+  history(senderId: string, limit: number): Promise<TransferRecord[]> {
+    return this.store.listBySender(senderId, limit);
   }
 
   /** Execute whatever steps remain for this transfer. Safe to call repeatedly. */

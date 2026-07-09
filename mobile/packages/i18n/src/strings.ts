@@ -47,10 +47,15 @@ export const en = {
     done: 'Done!', noCustomer: 'No customer with that phone', earned: 'Earned',
   },
   send: {
-    title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient',
+    title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient number',
+    recipientName: 'Recipient name', recipientNamePlaceholder: 'Full name', rail: 'How they receive',
     rate: 'Exchange rate', fee: 'Fee', youPay: 'You pay', recipientGets: 'Recipient gets',
     enterAmount: 'Enter an amount to see the quote', noRate: 'No rate for this corridor',
     sent: 'Sent!', toRecipient: 'to {recipient}',
+  },
+  activity: {
+    send: 'Sent', deposit: 'Deposit', cashIn: 'Cash in', cashOut: 'Cash out', topup: 'Top-up', payout: 'Payout', reversal: 'Reversal',
+    completed: 'Completed', processing: 'Processing',
   },
   receive: {
     title: 'Receive', subtitle: 'Share your details to get paid', yourAccount: 'Your account', copied: 'Copied',
@@ -119,10 +124,15 @@ export const pt: Dictionary = {
     done: 'Pronto!', noCustomer: 'Nenhum cliente com esse telefone', earned: 'Ganho',
   },
   send: {
-    title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Destinatário',
+    title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Número do destinatário',
+    recipientName: 'Nome do destinatário', recipientNamePlaceholder: 'Nome completo', rail: 'Como recebe',
     rate: 'Taxa de câmbio', fee: 'Taxa', youPay: 'Você paga', recipientGets: 'Destinatário recebe',
     enterAmount: 'Digite um valor para ver a cotação', noRate: 'Sem cotação para este trajeto',
     sent: 'Enviado!', toRecipient: 'para {recipient}',
+  },
+  activity: {
+    send: 'Enviado', deposit: 'Depósito', cashIn: 'Depósito (agente)', cashOut: 'Saque', topup: 'Recarga', payout: 'Pagamento', reversal: 'Estorno',
+    completed: 'Concluído', processing: 'Processando',
   },
   receive: {
     title: 'Receber', subtitle: 'Compartilhe seus dados para receber', yourAccount: 'Sua conta', copied: 'Copiado',
@@ -186,10 +196,15 @@ export const fr: Dictionary = {
     done: 'Terminé !', noCustomer: 'Aucun client avec ce numéro', earned: 'Gagné',
   },
   send: {
-    title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Destinataire',
+    title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Numéro du destinataire',
+    recipientName: 'Nom du destinataire', recipientNamePlaceholder: 'Nom complet', rail: 'Mode de réception',
     rate: 'Taux de change', fee: 'Frais', youPay: 'Vous payez', recipientGets: 'Le destinataire reçoit',
     enterAmount: 'Saisissez un montant pour voir le devis', noRate: 'Aucun taux pour ce corridor',
     sent: 'Envoyé !', toRecipient: 'à {recipient}',
+  },
+  activity: {
+    send: 'Envoyé', deposit: 'Dépôt', cashIn: 'Dépôt (agent)', cashOut: 'Retrait', topup: 'Recharge', payout: 'Paiement', reversal: 'Remboursement',
+    completed: 'Terminé', processing: 'En cours',
   },
   receive: {
     title: 'Recevoir', subtitle: 'Partagez vos coordonnées pour être payé', yourAccount: 'Votre compte', copied: 'Copié',

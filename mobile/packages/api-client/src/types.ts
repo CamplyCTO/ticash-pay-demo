@@ -85,6 +85,8 @@ export interface TransferResult {
   status: 'pending' | 'debited' | 'fx_booked' | 'completed';
 }
 
+export type PayoutRail = 'moncash' | 'natcash';
+
 export interface TxRow {
   transactionUid: string;
   type: string;
@@ -94,6 +96,13 @@ export interface TxRow {
   accountKey: string;
   currency: Currency;
   amountMinor: string; // signed: + credit, - debit
+  // Send rows are enriched by the backend with the recipient + payout details:
+  recipientName?: string | null;
+  recipientRef?: string | null;
+  payoutRail?: PayoutRail | null;
+  transferStatus?: string;
+  receiveMinor?: string;
+  toCurrency?: Currency;
 }
 
 export interface KycLimit {
@@ -112,6 +121,8 @@ export interface AirtimeProduct {
 
 export interface SendTransferInput {
   recipientRef: string;
+  recipientName?: string;
+  payoutRail?: PayoutRail;
   fromCurrency: Currency;
   toCurrency: Currency;
   sendAmount: string;

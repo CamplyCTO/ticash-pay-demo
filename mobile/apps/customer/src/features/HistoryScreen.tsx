@@ -3,17 +3,31 @@ import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card, EmptyState, ListItem, Screen, Skeleton, Text, useTheme } from '@ticash/ui';
 import { formatMoneyParts, type TxRow } from '@ticash/api-client';
-import { useI18n } from '@ticash/i18n';
+import { useI18n, type Translate } from '@ticash/i18n';
 import { useTransactions } from '@ticash/core';
 
-const LABEL: Record<string, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  transfer: { label: 'Send', icon: 'arrow-up' },
-  fund_wallet: { label: 'Deposit', icon: 'arrow-down' },
-  cash_in: { label: 'Cash in', icon: 'arrow-down' },
-  cash_out: { label: 'Cash out', icon: 'arrow-up' },
-  airtime: { label: 'Top-up', icon: 'phone-portrait-outline' },
-  payout: { label: 'Payout', icon: 'paper-plane-outline' },
-  reversal: { label: 'Reversal', icon: 'refresh' },
+/** Operation label per ledger type (type-safe fixed keys; unknown types show raw). */
+function typeLabel(type: string, tr: Translate): string {
+  switch (type) {
+    case 'transfer': return tr('activity.send');
+    case 'fund_wallet': return tr('activity.deposit');
+    case 'cash_in': return tr('activity.cashIn');
+    case 'cash_out': return tr('activity.cashOut');
+    case 'airtime': return tr('activity.topup');
+    case 'payout': return tr('activity.payout');
+    case 'reversal': return tr('activity.reversal');
+    default: return type;
+  }
+}
+
+const ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  transfer: 'arrow-up',
+  fund_wallet: 'arrow-down',
+  cash_in: 'arrow-down',
+  cash_out: 'arrow-up',
+  airtime: 'phone-portrait-outline',
+  payout: 'paper-plane-outline',
+  reversal: 'refresh',
 };
 
 export function HistoryScreen() {
@@ -41,19 +55,34 @@ export function HistoryScreen() {
   );
 }
 
+function railLabel(rail?: string | null): string {
+  return rail === 'moncash' ? 'MonCash' : rail === 'natcash' ? 'NatCash' : '';
+}
+
 function TxItem({ row, last }: { row: TxRow; last: boolean }) {
   const t = useTheme();
-  const meta = LABEL[row.type] ?? { label: row.type, icon: 'ellipse-outline' as const };
+  const { t: tr } = useI18n();
+  const isSend = row.type === 'transfer';
+  const icon = ICON[row.type] ?? 'ellipse-outline';
   const p = formatMoneyParts(row.amountMinor, row.currency);
   const credit = !p.negative;
   const date = row.createdAt.slice(0, 10);
+
+  // Sends show the recipient; everything else shows the operation label.
+  const label = typeLabel(row.type, tr);
+  const title = isSend && row.recipientName ? row.recipientName : label;
+  const status = row.transferStatus ? (row.transferStatus === 'completed' ? tr('activity.completed') : tr('activity.processing')) : '';
+  const subtitle = isSend
+    ? [row.recipientRef, railLabel(row.payoutRail), status, date].filter(Boolean).join(' · ')
+    : date;
+
   return (
     <ListItem
-      title={meta.label}
-      subtitle={date}
+      title={title}
+      subtitle={subtitle}
       left={
         <View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name={meta.icon} size={18} color={t.colors.primary} />
+          <Ionicons name={icon} size={18} color={t.colors.primary} />
         </View>
       }
       value={`${credit ? '+' : '-'}${p.symbol} ${p.integer},${p.fraction}`}

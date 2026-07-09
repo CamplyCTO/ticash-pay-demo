@@ -12,11 +12,18 @@ import { Currency } from '../money/currency';
  */
 export type TransferStatus = 'pending' | 'debited' | 'fx_booked' | 'completed';
 
+/** Haiti mobile-money payout rail the sender chose for this transfer. */
+export type PayoutRail = 'moncash' | 'natcash';
+
 export interface TransferRecord {
   correlationId: string;
   baseIdempotencyKey: string;
   senderId: string;
   recipientRef: string;
+  /** Human name of the person receiving the money (shown in history + on the payout). */
+  recipientName: string | null;
+  /** Chosen payout rail (MonCash/NatCash) when the destination is Haiti. */
+  payoutRail: PayoutRail | null;
   fromCurrency: Currency;
   toCurrency: Currency;
   sendMinor: bigint;
@@ -37,6 +44,8 @@ export interface TransferStore {
   setStatus(correlationId: string, status: TransferStatus): Promise<TransferRecord>;
   /** All transfers not yet `completed` — the recovery work-list. */
   listIncomplete(): Promise<TransferRecord[]>;
+  /** The caller's own transfers, newest first — for the app's activity history. */
+  listBySender(senderId: string, limit: number): Promise<TransferRecord[]>;
 }
 
 export class InMemoryTransferStore implements TransferStore {
@@ -63,5 +72,11 @@ export class InMemoryTransferStore implements TransferStore {
   }
   async listIncomplete(): Promise<TransferRecord[]> {
     return [...this.byId.values()].filter((t) => t.status !== 'completed').sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  async listBySender(senderId: string, limit: number): Promise<TransferRecord[]> {
+    return [...this.byId.values()]
+      .filter((t) => t.senderId === senderId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
   }
 }

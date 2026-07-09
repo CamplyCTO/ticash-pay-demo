@@ -83,6 +83,7 @@ describe('TransferService saga', () => {
     // Simulate a crash AFTER the debit leg posted + status advanced, BEFORE the fx leg.
     await store.create({
       correlationId, baseIdempotencyKey: 'xfer-resume', senderId: 'jean', recipientRef: '50912345678',
+      recipientName: null, payoutRail: null,
       fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n,
     });
     await ledger.postTransferDebit({ senderId: 'jean', quote: QUOTE, correlationId, recipientRef: '50912345678', idempotencyKey: 'xfer-resume:debit' });
@@ -107,7 +108,7 @@ describe('TransferService saga', () => {
     const svc = new TransferService(ledger, store);
     const good = deriveUuid('good');
     const bad = deriveUuid('bad');
-    const base = { recipientRef: '50912345678', fromCurrency: 'BRL' as const, toCurrency: 'HTG' as const, sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n };
+    const base = { recipientRef: '50912345678', recipientName: null, payoutRail: null, fromCurrency: 'BRL' as const, toCurrency: 'HTG' as const, sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n };
     await store.create({ correlationId: good, baseIdempotencyKey: 'good', senderId: 'jean', ...base });
     await store.create({ correlationId: bad, baseIdempotencyKey: 'bad', senderId: 'broke', ...base }); // no funds -> debit throws
 
@@ -125,6 +126,7 @@ describe('TransferService saga', () => {
     const correlationId = deriveUuid('xfer-stuck');
     await store.create({
       correlationId, baseIdempotencyKey: 'xfer-stuck', senderId: 'jean', recipientRef: '50912345678',
+      recipientName: null, payoutRail: null,
       fromCurrency: 'BRL', toCurrency: 'HTG', sendMinor: 50000n, feeMinor: 1250n, rate: '24.36', receiveMinor: 1218000n,
     });
 

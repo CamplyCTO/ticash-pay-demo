@@ -71,16 +71,21 @@ describe('/app customer flows (WS-2)', () => {
     // Admin funds the caller's wallet (uses the generated externalId).
     await post('/transactions/fund-wallet', { customerId: ext, currency: 'BRL', amount: '1000.00', idempotencyKey: 'fund-' + ext });
 
-    const send = await post('/app/transfers', { recipientRef: '50912345678', fromCurrency: 'BRL', toCurrency: 'HTG', sendAmount: '500.00' }, { authorization: token });
+    const send = await post('/app/transfers', { recipientRef: '50912345678', recipientName: 'Marie Toussaint', payoutRail: 'moncash', fromCurrency: 'BRL', toCurrency: 'HTG', sendAmount: '500.00' }, { authorization: token });
     expect(send.statusCode).toBe(201);
     expect(send.json().correlationId).toBeTruthy();
     expect(BigInt(send.json().quote.receiveMinor)).toBeGreaterThan(0n);
 
-    // History includes the wallet debit for this caller.
+    // History includes the send row, ENRICHED with recipient name / number / rail / status.
     const hist = await get('/app/transactions', { authorization: token });
     expect(hist.statusCode).toBe(200);
-    expect(hist.json().length).toBeGreaterThan(0);
-    expect(hist.json().some((r: any) => r.type === 'transfer')).toBe(true);
+    const sendRow = hist.json().find((r: any) => r.type === 'transfer');
+    expect(sendRow).toBeTruthy();
+    expect(sendRow.recipientName).toBe('Marie Toussaint');
+    expect(sendRow.recipientRef).toBe('50912345678');
+    expect(sendRow.payoutRail).toBe('moncash');
+    expect(sendRow.transferStatus).toBeTruthy();
+    expect(BigInt(sendRow.receiveMinor)).toBeGreaterThan(0n);
 
     // /app/me reflects the reduced BRL balance.
     const me = await get('/app/me', { authorization: token });
