@@ -1,6 +1,6 @@
 /** Ticash Pay copy. EN is the source of truth for the shape; PT/FR must match it. */
 export const en = {
-  common: { appName: 'Ticash Pay', continue: 'Continue', cancel: 'Cancel', back: 'Back', retry: 'Retry', loading: 'Loading…', error: 'Something went wrong' },
+  common: { appName: 'Ticash Pay', continue: 'Continue', cancel: 'Cancel', back: 'Back', retry: 'Retry', loading: 'Loading…', error: 'Something went wrong', optional: 'optional' },
   onboarding: {
     title: 'Send money home, in minutes.',
     subtitle: 'Brazil → Haiti and beyond. Low fees, real-time, secure.',
@@ -18,6 +18,14 @@ export const en = {
     verify: 'Verify',
     resend: 'Resend code',
     signOut: 'Sign out',
+    createAccount: 'Create account', signIn: 'Sign in', haveAccount: 'I already have an account',
+    signupTitle: 'Create your account', signupSubtitle: 'A few details and you are ready.',
+    name: 'Full name', namePlaceholder: 'Your full name', country: 'Country', email: 'Email',
+    password: 'Password', passwordHint: 'At least 6 characters', newPassword: 'New password',
+    loginTitle: 'Welcome back', loginSubtitle: 'Sign in with your email or phone.',
+    handle: 'Email or phone', handlePlaceholder: 'email or +55…',
+    forgot: 'Forgot password?', forgotSubtitle: 'Enter your phone to receive a code.', codeSent: 'Code sent',
+    resetTitle: 'New password', resetPassword: 'Reset password',
     invalidCode: 'Invalid or expired code',
     rateLimited: 'Too many requests. Try again later.',
   },
@@ -77,7 +85,7 @@ export const en = {
 export type Dictionary = typeof en;
 
 export const pt: Dictionary = {
-  common: { appName: 'Ticash Pay', continue: 'Continuar', cancel: 'Cancelar', back: 'Voltar', retry: 'Tentar de novo', loading: 'Carregando…', error: 'Algo deu errado' },
+  common: { appName: 'Ticash Pay', continue: 'Continuar', cancel: 'Cancelar', back: 'Voltar', retry: 'Tentar de novo', loading: 'Carregando…', error: 'Algo deu errado', optional: 'opcional' },
   onboarding: {
     title: 'Envie dinheiro para casa, em minutos.',
     subtitle: 'Brasil → Haiti e além. Taxas baixas, em tempo real, seguro.',
@@ -95,6 +103,14 @@ export const pt: Dictionary = {
     verify: 'Verificar',
     resend: 'Reenviar código',
     signOut: 'Sair',
+    createAccount: 'Criar conta', signIn: 'Entrar', haveAccount: 'Já tenho uma conta',
+    signupTitle: 'Crie sua conta', signupSubtitle: 'Alguns dados e pronto.',
+    name: 'Nome completo', namePlaceholder: 'Seu nome completo', country: 'País', email: 'E-mail',
+    password: 'Senha', passwordHint: 'Pelo menos 6 caracteres', newPassword: 'Nova senha',
+    loginTitle: 'Bem-vindo de volta', loginSubtitle: 'Entre com seu e-mail ou telefone.',
+    handle: 'E-mail ou telefone', handlePlaceholder: 'e-mail ou +55…',
+    forgot: 'Esqueceu a senha?', forgotSubtitle: 'Digite seu telefone para receber um código.', codeSent: 'Código enviado',
+    resetTitle: 'Nova senha', resetPassword: 'Redefinir senha',
     invalidCode: 'Código inválido ou expirado',
     rateLimited: 'Muitas tentativas. Tente mais tarde.',
   },
@@ -149,7 +165,7 @@ export const pt: Dictionary = {
 };
 
 export const fr: Dictionary = {
-  common: { appName: 'Ticash Pay', continue: 'Continuer', cancel: 'Annuler', back: 'Retour', retry: 'Réessayer', loading: 'Chargement…', error: 'Une erreur est survenue' },
+  common: { appName: 'Ticash Pay', continue: 'Continuer', cancel: 'Annuler', back: 'Retour', retry: 'Réessayer', loading: 'Chargement…', error: 'Une erreur est survenue', optional: 'optionnel' },
   onboarding: {
     title: 'Envoyez de l’argent au pays, en quelques minutes.',
     subtitle: 'Brésil → Haïti et au-delà. Frais réduits, en temps réel, sécurisé.',
@@ -167,6 +183,14 @@ export const fr: Dictionary = {
     verify: 'Vérifier',
     resend: 'Renvoyer le code',
     signOut: 'Se déconnecter',
+    createAccount: 'Créer un compte', signIn: 'Se connecter', haveAccount: 'J’ai déjà un compte',
+    signupTitle: 'Créez votre compte', signupSubtitle: 'Quelques infos et c’est prêt.',
+    name: 'Nom complet', namePlaceholder: 'Votre nom complet', country: 'Pays', email: 'E-mail',
+    password: 'Mot de passe', passwordHint: 'Au moins 6 caractères', newPassword: 'Nouveau mot de passe',
+    loginTitle: 'Bon retour', loginSubtitle: 'Connectez-vous avec e-mail ou téléphone.',
+    handle: 'E-mail ou téléphone', handlePlaceholder: 'e-mail ou +55…',
+    forgot: 'Mot de passe oublié ?', forgotSubtitle: 'Entrez votre téléphone pour recevoir un code.', codeSent: 'Code envoyé',
+    resetTitle: 'Nouveau mot de passe', resetPassword: 'Réinitialiser',
     invalidCode: 'Code invalide ou expiré',
     rateLimited: 'Trop de tentatives. Réessayez plus tard.',
   },

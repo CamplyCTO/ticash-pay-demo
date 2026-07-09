@@ -24,11 +24,17 @@ export class AuthError extends Error {
  * Times cross the port as ISO strings; only hashes (never raw codes/tokens) are stored.
  */
 export interface AuthStore {
-  createUser(input: CreateAppUserInput): Promise<AppUser>; // unique phone -> CONFLICT
+  createUser(input: CreateAppUserInput): Promise<AppUser>; // unique phone/email -> CONFLICT
   getUserById(id: string): Promise<AppUser | null>;
   getUserByPhone(phone: string): Promise<AppUser | null>;
+  /** Login by email (case-insensitive). */
+  getUserByEmail(email: string): Promise<AppUser | null>;
   /** All app_users linked to a party (customers/agents.external_id) — for push dispatch. */
   findUsersByExternalId(externalId: string): Promise<AppUser[]>;
+  /** Set/replace the scrypt password hash (signup + password reset). */
+  setPasswordHash(userId: string, passwordHash: string): Promise<void>;
+  /** Mark the phone verified once the signup OTP is confirmed. */
+  markPhoneVerified(userId: string): Promise<void>;
 
   saveOtp(input: SaveOtpInput): Promise<void>;
   /** Atomically consume the newest valid (unconsumed, unexpired) code for the phone. */

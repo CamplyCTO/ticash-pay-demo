@@ -1,2 +1,2 @@
-import { OnboardingScreen } from '@ticash/core';
+import { OnboardingScreen } from '@/features/auth/OnboardingScreen';
 export default OnboardingScreen;

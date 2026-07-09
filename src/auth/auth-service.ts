@@ -3,8 +3,13 @@ import { RegistryError, RegistryStore } from '../registry/store';
 import { AuthError, AuthStore } from './auth-store';
 import { OtpSender } from './otp-sender';
 import { Verifier } from './verifier';
+import { hashPassword, verifyPassword } from './password';
 import { JwtClaims, newOtpCode, newRefreshToken, sha256Hex, signAccessToken, verifyAccessToken } from './tokens';
 import { AppUser } from './types';
+
+/** A fixed invalid hash: verify against it when a login handle is unknown so the
+ *  response time doesn't reveal whether an account exists (anti-enumeration). */
+const DUMMY_HASH = hashPassword('ticash-dummy-password');
 
 export interface AuthConfig {
   jwtSecret: string;
@@ -53,20 +58,81 @@ export class AuthService {
     private readonly verifier?: Verifier,
   ) {}
 
-  /** Customer self-signup: create the party + login, then send the first OTP. */
-  async registerCustomer(args: { phone: string; email?: string | null }): Promise<{ user: PublicUser }> {
+  /**
+   * Customer self-signup with profile + password. Creates the party + login and
+   * sends an OTP to VERIFY the phone (not a per-login code). After verifying once,
+   * the user logs in with email/phone + password.
+   */
+  async registerCustomer(args: {
+    phone: string;
+    name?: string | null;
+    country?: string | null;
+    email?: string | null;
+    password?: string | null;
+  }): Promise<{ user: PublicUser }> {
     if (await this.store.getUserByPhone(args.phone)) {
       throw new AuthError(`phone ${args.phone} already registered`, 'CONFLICT');
     }
+    if (args.email && (await this.store.getUserByEmail(args.email))) {
+      throw new AuthError(`email ${args.email} already registered`, 'CONFLICT');
+    }
+    const passwordHash = args.password ? hashPassword(args.password) : null;
     const externalId = await this.createCustomerParty();
     const user = await this.store.createUser({
       role: 'customer',
       externalId,
       phone: args.phone,
       email: args.email ?? null,
+      name: args.name ?? null,
+      country: args.country ?? null,
+      passwordHash,
     });
-    await this.issueOtp(args.phone, 'signup');
+    await this.issueOtp(args.phone, 'signup'); // verify the phone
     return { user: toPublic(user) };
+  }
+
+  /** Password login by email OR phone. No OTP — the phone was verified at signup. */
+  async loginWithPassword(args: { handle: string; password: string; device?: string }): Promise<AuthTokens> {
+    const user = await this.resolveByHandle(args.handle);
+    // Always run a verify (dummy when unknown) so timing doesn't leak account existence.
+    const ok = verifyPassword(args.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !ok) throw new AuthError('invalid email/phone or password', 'UNAUTHORIZED');
+    if (user.status === 'blocked') throw new AuthError('account is blocked', 'FORBIDDEN');
+    return this.startSession(user, args.device);
+  }
+
+  /** Start a password reset: send an OTP to the account's phone. Always reports
+   *  success (never reveals whether the handle exists). */
+  async requestPasswordReset(handle: string): Promise<{ sent: true }> {
+    const user = await this.resolveByHandle(handle);
+    if (user && user.status !== 'blocked') await this.issueOtp(user.phone, 'reset');
+    return { sent: true };
+  }
+
+  /** Complete a reset: verify the phone OTP, set the new password, and log in. */
+  async resetPassword(args: { phone: string; code: string; newPassword: string; device?: string }): Promise<AuthTokens> {
+    const user = await this.store.getUserByPhone(args.phone);
+    if (!user) throw new AuthError(`no account for ${args.phone}`, 'NOT_FOUND');
+    if (user.status === 'blocked') throw new AuthError('account is blocked', 'FORBIDDEN');
+    const ok = this.verifier
+      ? await this.verifier.check(args.phone, args.code)
+      : await this.store.consumeOtp(args.phone, sha256Hex(args.code), this.iso(this.now()));
+    if (!ok) throw new AuthError('invalid or expired code', 'INVALID_OTP');
+    await this.store.setPasswordHash(user.id, hashPassword(args.newPassword));
+    if (!user.phoneVerified) await this.store.markPhoneVerified(user.id);
+    return this.startSession(user, args.device);
+  }
+
+  /** Profile for /app/me (name/country/email/phone/verified). */
+  async profile(userId: string): Promise<{ name: string | null; country: string | null; email: string | null; phone: string; phoneVerified: boolean } | null> {
+    const u = await this.store.getUserById(userId);
+    return u ? { name: u.name, country: u.country, email: u.email, phone: u.phone, phoneVerified: u.phoneVerified } : null;
+  }
+
+  /** Resolve a login handle: '@' -> email, else phone. */
+  private resolveByHandle(handle: string): Promise<AppUser | null> {
+    const h = handle.trim();
+    return h.includes('@') ? this.store.getUserByEmail(h) : this.store.getUserByPhone(h);
   }
 
   /** Admin provisions an agent's app login (the agent must already exist). */
@@ -98,6 +164,7 @@ export class AuthService {
       ? await this.verifier.check(args.phone, args.code)
       : await this.store.consumeOtp(args.phone, sha256Hex(args.code), this.iso(this.now()));
     if (!ok) throw new AuthError('invalid or expired code', 'INVALID_OTP');
+    if (!user.phoneVerified) await this.store.markPhoneVerified(user.id);
     return this.startSession(user, args.device);
   }
 

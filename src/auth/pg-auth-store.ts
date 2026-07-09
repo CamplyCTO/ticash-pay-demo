@@ -9,23 +9,41 @@ export class PgAuthStore implements AuthStore {
   async createUser(input: CreateAppUserInput): Promise<AppUser> {
     try {
       const res = await this.pool.query(
-        `INSERT INTO app_users (role, external_id, phone, email)
-         VALUES ($1,$2,$3,$4)
-         RETURNING id, role, external_id, phone, email, status, created_at`,
-        [input.role, input.externalId, input.phone, input.email ?? null],
+        `INSERT INTO app_users (role, external_id, phone, email, name, country, password_hash)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         RETURNING id, role, external_id, phone, email, name, country, password_hash, phone_verified, status, created_at`,
+        [input.role, input.externalId, input.phone, input.email ?? null, input.name ?? null, input.country ?? null, input.passwordHash ?? null],
       );
       return mapUser(res.rows[0]);
     } catch (err) {
       if ((err as { code?: string }).code === '23505') {
-        throw new AuthError(`phone ${input.phone} already registered`, 'CONFLICT');
+        // Unique violation on phone OR the case-insensitive email index.
+        const detail = String((err as { detail?: string }).detail ?? '');
+        throw new AuthError(detail.includes('email') ? `email ${input.email} already registered` : `phone ${input.phone} already registered`, 'CONFLICT');
       }
       throw err;
     }
   }
 
+  async getUserByEmail(email: string): Promise<AppUser | null> {
+    const res = await this.pool.query(
+      `SELECT id, role, external_id, phone, email, name, country, password_hash, phone_verified, status, created_at FROM app_users WHERE lower(email) = lower($1)`,
+      [email],
+    );
+    return res.rows[0] ? mapUser(res.rows[0]) : null;
+  }
+
+  async setPasswordHash(userId: string, passwordHash: string): Promise<void> {
+    await this.pool.query(`UPDATE app_users SET password_hash = $2 WHERE id = $1`, [userId, passwordHash]);
+  }
+
+  async markPhoneVerified(userId: string): Promise<void> {
+    await this.pool.query(`UPDATE app_users SET phone_verified = true WHERE id = $1`, [userId]);
+  }
+
   async getUserById(id: string): Promise<AppUser | null> {
     const res = await this.pool.query(
-      `SELECT id, role, external_id, phone, email, status, created_at FROM app_users WHERE id = $1`,
+      `SELECT id, role, external_id, phone, email, name, country, password_hash, phone_verified, status, created_at FROM app_users WHERE id = $1`,
       [id],
     );
     return res.rows[0] ? mapUser(res.rows[0]) : null;
@@ -33,7 +51,7 @@ export class PgAuthStore implements AuthStore {
 
   async getUserByPhone(phone: string): Promise<AppUser | null> {
     const res = await this.pool.query(
-      `SELECT id, role, external_id, phone, email, status, created_at FROM app_users WHERE phone = $1`,
+      `SELECT id, role, external_id, phone, email, name, country, password_hash, phone_verified, status, created_at FROM app_users WHERE phone = $1`,
       [phone],
     );
     return res.rows[0] ? mapUser(res.rows[0]) : null;
@@ -41,7 +59,7 @@ export class PgAuthStore implements AuthStore {
 
   async findUsersByExternalId(externalId: string): Promise<AppUser[]> {
     const res = await this.pool.query(
-      `SELECT id, role, external_id, phone, email, status, created_at FROM app_users WHERE external_id = $1`,
+      `SELECT id, role, external_id, phone, email, name, country, password_hash, phone_verified, status, created_at FROM app_users WHERE external_id = $1`,
       [externalId],
     );
     return res.rows.map(mapUser);
@@ -126,6 +144,10 @@ function mapUser(r: any): AppUser {
     externalId: r.external_id,
     phone: r.phone,
     email: r.email ?? null,
+    name: r.name ?? null,
+    country: r.country ?? null,
+    passwordHash: r.password_hash ?? null,
+    phoneVerified: r.phone_verified ?? false,
     status: r.status,
     createdAt: r.created_at.toISOString(),
   };

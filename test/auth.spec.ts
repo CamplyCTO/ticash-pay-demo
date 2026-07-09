@@ -218,3 +218,55 @@ describe('AuthService — provider-managed OTP (Twilio Verify branch)', () => {
     expect(tokens.user.phone).toBe('+5511988887777');
   });
 });
+
+describe('AuthService — password signup + login + reset (WS-0 v2)', () => {
+  it('signup stores a profile + password, sends a verify OTP, then password login works', async () => {
+    const { svc, sender, store } = build();
+    const { user } = await svc.registerCustomer({ phone: '+5511900000001', name: 'Jean', country: 'BR', email: 'jean@ex.com', password: 'secret123' });
+
+    // Phone starts unverified; profile + password persisted.
+    const u0 = await store.getUserById(user.id);
+    expect(u0!.phoneVerified).toBe(false);
+    expect(u0!.name).toBe('Jean');
+    expect(u0!.country).toBe('BR');
+    expect(u0!.passwordHash).toBeTruthy();
+    expect(u0!.passwordHash).not.toContain('secret123'); // hashed, never plaintext
+
+    // Verify the phone via the signup OTP -> phoneVerified + a session.
+    const t1 = await svc.verifyOtp({ phone: '+5511900000001', code: sender.last!.code });
+    expect(t1.accessToken).toBeTruthy();
+    expect((await store.getUserById(user.id))!.phoneVerified).toBe(true);
+
+    // Password login by phone AND by email.
+    expect((await svc.loginWithPassword({ handle: '+5511900000001', password: 'secret123' })).accessToken).toBeTruthy();
+    expect((await svc.loginWithPassword({ handle: 'jean@ex.com', password: 'secret123' })).user.id).toBe(user.id);
+
+    // Wrong password + unknown handle both fail as UNAUTHORIZED (no enumeration).
+    await expect(svc.loginWithPassword({ handle: 'jean@ex.com', password: 'nope' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(svc.loginWithPassword({ handle: 'ghost@ex.com', password: 'x' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('rejects a duplicate email at signup', async () => {
+    const { svc } = build();
+    await svc.registerCustomer({ phone: '+5511900000002', email: 'dup@ex.com', password: 'secret123' });
+    await expect(svc.registerCustomer({ phone: '+5511900000003', email: 'dup@ex.com', password: 'secret123' })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('password reset via OTP replaces the password and logs in', async () => {
+    const { svc, sender } = build();
+    await svc.registerCustomer({ phone: '+5511900000004', email: 'r@ex.com', password: 'oldpass1' });
+    await svc.verifyOtp({ phone: '+5511900000004', code: sender.last!.code });
+
+    await svc.requestPasswordReset('r@ex.com'); // -> OTP to the phone
+    const t = await svc.resetPassword({ phone: '+5511900000004', code: sender.last!.code, newPassword: 'newpass1' });
+    expect(t.accessToken).toBeTruthy();
+
+    await expect(svc.loginWithPassword({ handle: 'r@ex.com', password: 'oldpass1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect((await svc.loginWithPassword({ handle: 'r@ex.com', password: 'newpass1' })).accessToken).toBeTruthy();
+  });
+
+  it('reset-request for an unknown handle does not throw (no enumeration)', async () => {
+    const { svc } = build();
+    await expect(svc.requestPasswordReset('nobody@ex.com')).resolves.toEqual({ sent: true });
+  });
+});

@@ -21,14 +21,24 @@ export interface WalletBalance {
   balanceMinor: string;
 }
 
+export interface MeProfile {
+  id: string;
+  role: 'customer' | 'agent';
+  externalId: string;
+  phone?: string | null;
+  name?: string | null;
+  country?: string | null; // ISO alpha-2 -> home currency
+  email?: string | null;
+}
+
 export interface MeCustomer {
-  user: { id: string; role: 'customer'; externalId: string };
+  user: MeProfile & { role: 'customer' };
   kyc: { level: number; status: string } | null;
   wallets: WalletBalance[];
 }
 
 export interface MeAgent {
-  user: { id: string; role: 'agent'; externalId: string };
+  user: MeProfile & { role: 'agent' };
   agent: { commissionBps: number } | null;
   float: WalletBalance[];
   commission: WalletBalance[];

@@ -9,7 +9,11 @@ export interface AppUser {
   role: AppRole;
   externalId: string; // links to customers/agents.external_id (the ledger ownerId)
   phone: string; // login handle (E.164)
-  email: string | null;
+  email: string | null; // alternate login handle
+  name: string | null;
+  country: string | null; // ISO-3166 alpha-2 (BR/HT/US/MX/DO) — sets the home currency
+  passwordHash: string | null; // scrypt; null until a password is set
+  phoneVerified: boolean; // true once the signup OTP is confirmed
   status: AppUserStatus;
   createdAt: string;
 }
@@ -29,6 +33,9 @@ export interface CreateAppUserInput {
   externalId: string;
   phone: string;
   email?: string | null;
+  name?: string | null;
+  country?: string | null;
+  passwordHash?: string | null;
 }
 
 export interface SaveOtpInput {

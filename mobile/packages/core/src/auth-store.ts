@@ -12,9 +12,17 @@ interface AuthState {
   user: PublicUser | null;
   /** Restore a session from the stored refresh token on app launch. */
   bootstrap: () => Promise<void>;
-  /** Begin login/signup: trigger an OTP for the phone. `register` self-signs-up. */
+  /** Customer signup with profile + password; an OTP then verifies the phone. */
+  signUp: (input: { name: string; phone: string; country: string; email?: string; password: string }) => Promise<void>;
+  /** Password login by email OR phone (no OTP). */
+  loginPassword: (handle: string, password: string) => Promise<void>;
+  /** Forgot password: send an OTP to the account's phone. */
+  requestReset: (handle: string) => Promise<void>;
+  /** Complete a reset (phone + OTP + new password) — logs in. */
+  resetPassword: (phone: string, code: string, newPassword: string) => Promise<void>;
+  /** Agent OTP login (agents are admin-provisioned, no password). */
   startOtp: (phone: string, opts?: { register?: boolean }) => Promise<void>;
-  /** Complete login by verifying the OTP. */
+  /** Complete an OTP login/verification (agent login + customer phone-verify). */
   verify: (phone: string, code: string) => Promise<void>;
   /** Force a token refresh; signs out on failure. */
   refresh: () => Promise<boolean>;
@@ -43,10 +51,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  signUp: async ({ name, phone, country, email, password }) => {
+    // Creates the account + sends a phone-verification OTP. Session starts after verify.
+    await api.register({ name, phone, country, password, ...(email ? { email } : {}) });
+  },
+
+  loginPassword: async (handle, password) => {
+    const tokens = await api.login(handle.trim(), password);
+    await applyTokens(set, tokens);
+    set({ status: 'authenticated' });
+  },
+
+  requestReset: async (handle) => {
+    await api.requestPasswordReset(handle.trim());
+  },
+
+  resetPassword: async (phone, code, newPassword) => {
+    const tokens = await api.resetPassword(phone, code, newPassword);
+    await applyTokens(set, tokens);
+    set({ status: 'authenticated' });
+  },
+
   startOtp: async (phone, opts) => {
     if (opts?.register) {
       try {
-        await api.register(phone); // self-signup also sends the first OTP
+        await api.register({ phone }); // agent flow: self-signup also sends the first OTP
         return;
       } catch (e) {
         if (e instanceof ApiError && e.code === 'CONFLICT') {

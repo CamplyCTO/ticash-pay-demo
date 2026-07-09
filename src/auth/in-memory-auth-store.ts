@@ -18,6 +18,7 @@ interface OtpRow {
 export class InMemoryAuthStore implements AuthStore {
   private readonly users = new Map<string, AppUser>(); // id -> user
   private readonly byPhone = new Map<string, string>(); // phone -> id
+  private readonly byEmail = new Map<string, string>(); // lower(email) -> id
   private readonly otps: OtpRow[] = [];
   private readonly sessions = new Map<string, Session>();
 
@@ -31,17 +32,26 @@ export class InMemoryAuthStore implements AuthStore {
     if (this.byPhone.has(input.phone)) {
       throw new AuthError(`phone ${input.phone} already registered`, 'CONFLICT');
     }
+    const emailKey = input.email ? input.email.toLowerCase() : null;
+    if (emailKey && this.byEmail.has(emailKey)) {
+      throw new AuthError(`email ${input.email} already registered`, 'CONFLICT');
+    }
     const user: AppUser = {
       id: randomUUID(),
       role: input.role,
       externalId: input.externalId,
       phone: input.phone,
       email: input.email ?? null,
+      name: input.name ?? null,
+      country: input.country ?? null,
+      passwordHash: input.passwordHash ?? null,
+      phoneVerified: false,
       status: 'active',
       createdAt: this.clock(),
     };
     this.users.set(user.id, user);
     this.byPhone.set(user.phone, user.id);
+    if (emailKey) this.byEmail.set(emailKey, user.id);
     return user;
   }
 
@@ -52,6 +62,21 @@ export class InMemoryAuthStore implements AuthStore {
   async getUserByPhone(phone: string): Promise<AppUser | null> {
     const id = this.byPhone.get(phone);
     return id ? this.users.get(id) ?? null : null;
+  }
+
+  async getUserByEmail(email: string): Promise<AppUser | null> {
+    const id = this.byEmail.get(email.toLowerCase());
+    return id ? this.users.get(id) ?? null : null;
+  }
+
+  async setPasswordHash(userId: string, passwordHash: string): Promise<void> {
+    const u = this.users.get(userId);
+    if (u) this.users.set(userId, { ...u, passwordHash });
+  }
+
+  async markPhoneVerified(userId: string): Promise<void> {
+    const u = this.users.get(userId);
+    if (u) this.users.set(userId, { ...u, phoneVerified: true });
   }
 
   async findUsersByExternalId(externalId: string): Promise<AppUser[]> {

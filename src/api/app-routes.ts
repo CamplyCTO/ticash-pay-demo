@@ -37,10 +37,48 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
   const auth = deps.auth.service;
 
   // ---- public auth endpoints (no JWT) -------------------------------------
+  // Signup with profile + password. The OTP that follows VERIFIES the phone; after
+  // that the user logs in with email/phone + password (no code every time).
   app.post('/app/auth/register', async (req, reply) => {
-    const b = z.object({ phone: phoneSchema, email: z.string().email().optional() }).parse(req.body);
+    const b = z
+      .object({
+        phone: phoneSchema,
+        name: z.string().min(2).max(120).optional(),
+        country: z.string().length(2).optional(),
+        email: z.string().email().optional(),
+        password: z.string().min(6).max(128).optional(),
+      })
+      .parse(req.body);
     reply.status(201);
-    return auth.registerCustomer({ phone: b.phone, ...(b.email ? { email: b.email } : {}) });
+    return auth.registerCustomer({
+      phone: b.phone,
+      ...(b.name ? { name: b.name } : {}),
+      ...(b.country ? { country: b.country.toUpperCase() } : {}),
+      ...(b.email ? { email: b.email } : {}),
+      ...(b.password ? { password: b.password } : {}),
+    });
+  });
+
+  // Password login (email or phone + password) — no OTP.
+  app.post('/app/auth/login', async (req) => {
+    const b = z.object({ handle: z.string().min(3), password: z.string().min(1), device: z.string().optional() }).parse(req.body);
+    const tokens = await auth.loginWithPassword({ handle: b.handle, password: b.password, ...(b.device ? { device: b.device } : {}) });
+    req.log.info({ audit: 'auth.login', userId: tokens.user.id, role: tokens.user.role, method: 'password' }, 'login');
+    return tokens;
+  });
+
+  // Forgot password: send an OTP to the account's phone (always 200, no enumeration).
+  app.post('/app/auth/password/reset-request', async (req) => {
+    const b = z.object({ handle: z.string().min(3) }).parse(req.body);
+    return auth.requestPasswordReset(b.handle);
+  });
+
+  // Complete a reset: phone + OTP + new password -> logs the user in.
+  app.post('/app/auth/password/reset', async (req) => {
+    const b = z.object({ phone: phoneSchema, code: z.string().min(4).max(12), newPassword: z.string().min(6).max(128), device: z.string().optional() }).parse(req.body);
+    const tokens = await auth.resetPassword({ phone: b.phone, code: b.code, newPassword: b.newPassword, ...(b.device ? { device: b.device } : {}) });
+    req.log.info({ audit: 'auth.reset', userId: tokens.user.id }, 'password reset');
+    return tokens;
   });
 
   app.post('/app/auth/otp', async (req) => {
@@ -70,15 +108,17 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
   // wallet; an agent sees only their own float. Proof of per-user scoping.
   app.get('/app/me', async (req) => {
     const me = appUserOf(req);
+    const profile = await auth.profile(me.userId);
+    const user = { id: me.userId, role: me.role, externalId: me.externalId, phone: profile?.phone ?? null, name: profile?.name ?? null, country: profile?.country ?? null, email: profile?.email ?? null };
     if (me.role === 'customer') {
       const customer = await deps.registry.getCustomer(me.externalId);
       const wallets = await balancesFor(deps, (ccy) => customerWallet(me.externalId, ccy));
-      return { user: { id: me.userId, role: me.role, externalId: me.externalId }, kyc: customer ? { level: customer.kycLevel, status: customer.kycStatus } : null, wallets };
+      return { user, kyc: customer ? { level: customer.kycLevel, status: customer.kycStatus } : null, wallets };
     }
     const agent = await deps.registry.getAgent(me.externalId);
     const float = await balancesFor(deps, (ccy) => agentFloat(me.externalId, ccy));
     const commission = await balancesFor(deps, (ccy) => agentCommission(me.externalId, ccy));
-    return { user: { id: me.userId, role: me.role, externalId: me.externalId }, agent: agent ? { commissionBps: agent.commissionBps } : null, float, commission };
+    return { user, agent: agent ? { commissionBps: agent.commissionBps } : null, float, commission };
   });
 
   // A blocked customer can't transact (mirrors the admin routes).

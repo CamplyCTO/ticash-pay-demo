@@ -39,14 +39,27 @@ export class TicashApi {
   }
 
   // ---- auth (public) ----
-  register(phone: string, email?: string): Promise<{ user: PublicUser }> {
-    return this.request('POST', '/app/auth/register', { body: email ? { phone, email } : { phone } });
+  // Signup with profile + password; the OTP that follows verifies the phone.
+  register(input: { phone: string; name?: string; country?: string; email?: string; password?: string }): Promise<{ user: PublicUser }> {
+    return this.request('POST', '/app/auth/register', { body: input });
+  }
+  // Password login by email OR phone (no OTP).
+  login(handle: string, password: string, device?: string): Promise<AuthTokens> {
+    return this.request('POST', '/app/auth/login', { body: device ? { handle, password, device } : { handle, password } });
   }
   requestOtp(phone: string): Promise<{ sent: true }> {
     return this.request('POST', '/app/auth/otp', { body: { phone } });
   }
   verify(phone: string, code: string, device?: string): Promise<AuthTokens> {
     return this.request('POST', '/app/auth/verify', { body: device ? { phone, code, device } : { phone, code } });
+  }
+  // Forgot password: send an OTP to the account's phone (always succeeds).
+  requestPasswordReset(handle: string): Promise<{ sent: true }> {
+    return this.request('POST', '/app/auth/password/reset-request', { body: { handle } });
+  }
+  // Complete a reset: phone + OTP + new password -> logs in.
+  resetPassword(phone: string, code: string, newPassword: string, device?: string): Promise<AuthTokens> {
+    return this.request('POST', '/app/auth/password/reset', { body: device ? { phone, code, newPassword, device } : { phone, code, newPassword } });
   }
   refresh(refreshToken: string): Promise<AuthTokens> {
     return this.request('POST', '/app/auth/refresh', { body: { refreshToken } });

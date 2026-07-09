@@ -6,6 +6,7 @@ import { Balance, Card, Chip, EmptyState, Logo, Row, Screen, Skeleton, Text, use
 import { formatMoneyParts, isCustomerMe, type Currency } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
 import { useMe, FEATURE_USDT } from '@ticash/core';
+import { currencyForCountry } from './auth/countries';
 
 type ActionKey = 'send' | 'deposit' | 'receive' | 'topup' | 'usdt';
 const ALL_ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
@@ -26,7 +27,9 @@ export function HomeScreen() {
   const { data, isLoading } = useMe();
   const me = data && isCustomerMe(data) ? data : null;
   const wallets = me?.wallets ?? [];
-  const hero = wallets.find((w) => w.currency === 'BRL') ?? wallets[0] ?? { currency: 'BRL' as Currency, balanceMinor: '0' };
+  // Home balance shows the user's country currency (BR→BRL, MX→MXN, …).
+  const homeCcy = currencyForCountry(me?.user.country) as Currency;
+  const hero = wallets.find((w) => w.currency === homeCcy) ?? wallets[0] ?? { currency: homeCcy, balanceMinor: '0' };
   const parts = formatMoneyParts(hero.balanceMinor, hero.currency);
   const others = wallets.filter((w) => w !== hero);
 
