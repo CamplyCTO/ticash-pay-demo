@@ -32,6 +32,7 @@ export default function AppLayout() {
       <Tabs.Screen name="profile" options={{ title: tr('tabs.profile'), tabBarIcon: ({ color, size }) => <Ionicons name="person-outline" color={color} size={size} /> }} />
       {/* Navigable via router.push, hidden from the tab bar. */}
       <Tabs.Screen name="receive" options={{ href: null }} />
+      <Tabs.Screen name="deposit" options={{ href: null }} />
       <Tabs.Screen name="topup" options={{ href: null }} />
       <Tabs.Screen name="kyc" options={{ href: null }} />
     </Tabs>

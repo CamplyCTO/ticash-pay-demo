@@ -141,6 +141,12 @@ export class TicashApi {
     return this.request('POST', '/app/usdt/deposit', { auth: true, body: { amount } });
   }
 
+  // PIX deposit (Lytex on-ramp): create a BRL charge; returns the PIX copy-and-paste
+  // code + QR image to pay. The wallet is credited on settlement (Lytex webhook).
+  depositPix(input: { amount: string; payerName: string; payerCpf: string }): Promise<{ providerId: string; status: string; amountMinor: string; pix: { copyPaste?: string; qrCodeImage?: string } }> {
+    return this.request('POST', '/app/deposit/pix', { auth: true, body: input });
+  }
+
   // Push notifications: register / opt-out this device.
   registerPush(expoToken: string, platform?: string): Promise<{ ok: true }> {
     return this.request('POST', '/app/push/register', { auth: true, body: platform ? { expoToken, platform } : { expoToken } });

@@ -73,6 +73,17 @@ export function useKycStart() {
   return useMutation({ mutationFn: () => api.kycStart() });
 }
 
+export function useDepositPix() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { amount: string; payerName: string; payerCpf: string }) => api.depositPix(input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      void qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+}
+
 // ---- agent (WS-3) ----
 export function useLookupCustomer() {
   return useMutation({ mutationFn: (phone: string) => api.lookupCustomer(phone) });

@@ -12,6 +12,7 @@ export {
   useSendTransfer,
   useAirtimeTopup,
   useKycStart,
+  useDepositPix,
   useLookupCustomer,
   useAgentCashIn,
   useAgentCashOut,

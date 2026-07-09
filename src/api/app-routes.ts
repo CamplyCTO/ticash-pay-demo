@@ -340,6 +340,45 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     });
   }
 
+  // ---- PIX deposit (Lytex on-ramp): fund your own BRL wallet ---------------
+  // Creates a PIX charge for the authenticated customer and records an intent;
+  // the signed Lytex webhook (POST /webhooks/lytex) credits THIS wallet the
+  // RECORDED amount on payment. Present only when a Lytex gateway is configured.
+  if (deps.payments) {
+    const pay = deps.payments;
+    app.post('/app/deposit/pix', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z
+        .object({
+          amount: amountSchema,
+          payerName: z.string().min(2),
+          payerCpf: z.string().min(11).max(18),
+        })
+        .parse(req.body);
+      const amountMinor = money(b.amount, 'BRL');
+      if (amountMinor <= 0n) throw new RegistryError('amount must be positive', 'VALIDATION');
+      const reference = `dep-pix-${me.externalId}-${randomUUID()}`;
+      const charge = await pay.gateway.createCharge({
+        customerId: me.externalId,
+        currency: 'BRL',
+        amountMinor,
+        methods: ['pix'],
+        payer: { name: b.payerName.trim(), cpfCnpj: b.payerCpf.replace(/\D/g, '') },
+        reference,
+      });
+      await pay.intents.create({
+        providerId: charge.providerId,
+        provider: pay.gateway.name,
+        customerId: me.externalId,
+        currency: 'BRL',
+        amountMinor,
+        reference,
+      });
+      reply.status(201);
+      return { providerId: charge.providerId, status: charge.status, amountMinor: amountMinor.toString(), pix: charge.pix ?? {} };
+    });
+  }
+
   // ---- Airtime top-up: any country, scoped to the caller's wallet ---------
   if (deps.airtime) {
     const air = deps.airtime.service;

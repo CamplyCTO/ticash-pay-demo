@@ -7,9 +7,10 @@ import { formatMoneyParts, isCustomerMe, type Currency } from '@ticash/api-clien
 import { useI18n } from '@ticash/i18n';
 import { useMe, FEATURE_USDT } from '@ticash/core';
 
-type ActionKey = 'send' | 'receive' | 'topup' | 'usdt';
+type ActionKey = 'send' | 'deposit' | 'receive' | 'topup' | 'usdt';
 const ALL_ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
   { key: 'send', icon: 'arrow-up', route: '/(app)/send' },
+  { key: 'deposit', icon: 'add-circle-outline', route: '/(app)/deposit' }, // add balance via PIX
   { key: 'receive', icon: 'arrow-down', route: '/(app)/receive' },
   { key: 'topup', icon: 'phone-portrait-outline', route: '/(app)/topup' },
   { key: 'usdt', icon: 'logo-bitcoin' }, // WS-4 — hidden in v1 (FEATURE_USDT)

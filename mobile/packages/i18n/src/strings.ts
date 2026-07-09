@@ -28,8 +28,16 @@ export const en = {
   home: {
     greeting: 'Welcome back',
     totalBalance: 'Total balance',
-    send: 'Send', receive: 'Receive', topup: 'Top-up', usdt: 'USDT',
+    send: 'Send', deposit: 'Add', receive: 'Receive', topup: 'Top-up', usdt: 'USDT',
     recent: 'Recent activity', seeAll: 'See all', empty: 'No transactions yet',
+  },
+  deposit: {
+    title: 'Add balance', subtitle: 'Add money to your wallet instantly with PIX.',
+    amount: 'Amount (BRL)', name: 'Full name', namePlaceholder: 'Your full name', cpf: 'CPF',
+    generate: 'Generate PIX code',
+    payTitle: 'Pay with PIX', paySubtitle: 'Scan the QR code or copy the code in your bank app.',
+    copyCode: 'PIX copy-and-paste code', waiting: 'Your balance updates automatically once the payment is confirmed.',
+    refresh: 'Refresh balance', hint: 'PIX is instant — your balance appears as soon as we confirm the payment.',
   },
   profile: { language: 'Language', theme: 'Appearance', security: 'Security', kyc: 'Verification', level: 'Level', logout: 'Log out' },
   agent: {
@@ -92,8 +100,16 @@ export const pt: Dictionary = {
   home: {
     greeting: 'Bem-vindo de volta',
     totalBalance: 'Saldo total',
-    send: 'Enviar', receive: 'Receber', topup: 'Recarga', usdt: 'USDT',
+    send: 'Enviar', deposit: 'Adicionar', receive: 'Receber', topup: 'Recarga', usdt: 'USDT',
     recent: 'Atividade recente', seeAll: 'Ver tudo', empty: 'Nenhuma transação ainda',
+  },
+  deposit: {
+    title: 'Adicionar saldo', subtitle: 'Coloque dinheiro na sua carteira na hora, com PIX.',
+    amount: 'Valor (BRL)', name: 'Nome completo', namePlaceholder: 'Seu nome completo', cpf: 'CPF',
+    generate: 'Gerar código PIX',
+    payTitle: 'Pague com PIX', paySubtitle: 'Escaneie o QR code ou copie o código no app do seu banco.',
+    copyCode: 'Código PIX copia e cola', waiting: 'Seu saldo é atualizado automaticamente assim que o pagamento for confirmado.',
+    refresh: 'Atualizar saldo', hint: 'O PIX é instantâneo — seu saldo aparece assim que confirmarmos o pagamento.',
   },
   profile: { language: 'Idioma', theme: 'Aparência', security: 'Segurança', kyc: 'Verificação', level: 'Nível', logout: 'Sair' },
   agent: {
@@ -151,8 +167,16 @@ export const fr: Dictionary = {
   home: {
     greeting: 'Bon retour',
     totalBalance: 'Solde total',
-    send: 'Envoyer', receive: 'Recevoir', topup: 'Recharge', usdt: 'USDT',
+    send: 'Envoyer', deposit: 'Ajouter', receive: 'Recevoir', topup: 'Recharge', usdt: 'USDT',
     recent: 'Activité récente', seeAll: 'Tout voir', empty: 'Aucune transaction',
+  },
+  deposit: {
+    title: 'Ajouter du solde', subtitle: 'Ajoutez de l’argent à votre portefeuille instantanément avec PIX.',
+    amount: 'Montant (BRL)', name: 'Nom complet', namePlaceholder: 'Votre nom complet', cpf: 'CPF',
+    generate: 'Générer le code PIX',
+    payTitle: 'Payer avec PIX', paySubtitle: 'Scannez le QR code ou copiez le code dans votre application bancaire.',
+    copyCode: 'Code PIX copier-coller', waiting: 'Votre solde est mis à jour automatiquement dès que le paiement est confirmé.',
+    refresh: 'Actualiser le solde', hint: 'PIX est instantané — votre solde apparaît dès que nous confirmons le paiement.',
   },
   profile: { language: 'Langue', theme: 'Apparence', security: 'Sécurité', kyc: 'Vérification', level: 'Niveau', logout: 'Se déconnecter' },
   agent: {
