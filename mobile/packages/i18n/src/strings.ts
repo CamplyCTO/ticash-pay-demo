@@ -46,6 +46,7 @@ export const en = {
     payTitle: 'Pay with PIX', paySubtitle: 'Scan the QR code or copy the code in your bank app.',
     copyCode: 'PIX copy-and-paste code', waiting: 'Your balance updates automatically once the payment is confirmed.',
     refresh: 'Refresh balance', hint: 'PIX is instant — your balance appears as soon as we confirm the payment.',
+    unavailableTitle: 'Not available in your country yet', unavailableBody: 'PIX deposits are for Brazil only. To add funds in your country, visit a Ticash agent. Card and PayPal are coming soon.',
   },
   profile: { language: 'Language', theme: 'Appearance', security: 'Security', kyc: 'Verification', level: 'Level', logout: 'Log out' },
   agent: {
@@ -59,7 +60,7 @@ export const en = {
     recipientName: 'Recipient name', recipientNamePlaceholder: 'Full name', rail: 'How they receive',
     rate: 'Exchange rate', fee: 'Fee', youPay: 'You pay', recipientGets: 'Recipient gets',
     enterAmount: 'Enter an amount to see the quote', noRate: 'No rate for this corridor',
-    sent: 'Sent!', toRecipient: 'to {recipient}',
+    sent: 'Sent!', toRecipient: 'to {recipient}', toHaiti: 'Haiti',
   },
   activity: {
     send: 'Sent', deposit: 'Deposit', cashIn: 'Cash in', cashOut: 'Cash out', topup: 'Top-up', payout: 'Payout', reversal: 'Reversal',
@@ -131,6 +132,7 @@ export const pt: Dictionary = {
     payTitle: 'Pague com PIX', paySubtitle: 'Escaneie o QR code ou copie o código no app do seu banco.',
     copyCode: 'Código PIX copia e cola', waiting: 'Seu saldo é atualizado automaticamente assim que o pagamento for confirmado.',
     refresh: 'Atualizar saldo', hint: 'O PIX é instantâneo — seu saldo aparece assim que confirmarmos o pagamento.',
+    unavailableTitle: 'Ainda não disponível no seu país', unavailableBody: 'O depósito via PIX é só para o Brasil. Para adicionar saldo no seu país, procure um agente Ticash. Cartão e PayPal em breve.',
   },
   profile: { language: 'Idioma', theme: 'Aparência', security: 'Segurança', kyc: 'Verificação', level: 'Nível', logout: 'Sair' },
   agent: {
@@ -144,7 +146,7 @@ export const pt: Dictionary = {
     recipientName: 'Nome do destinatário', recipientNamePlaceholder: 'Nome completo', rail: 'Como recebe',
     rate: 'Taxa de câmbio', fee: 'Taxa', youPay: 'Você paga', recipientGets: 'Destinatário recebe',
     enterAmount: 'Digite um valor para ver a cotação', noRate: 'Sem cotação para este trajeto',
-    sent: 'Enviado!', toRecipient: 'para {recipient}',
+    sent: 'Enviado!', toRecipient: 'para {recipient}', toHaiti: 'Haiti',
   },
   activity: {
     send: 'Enviado', deposit: 'Depósito', cashIn: 'Depósito (agente)', cashOut: 'Saque', topup: 'Recarga', payout: 'Pagamento', reversal: 'Estorno',
@@ -211,6 +213,7 @@ export const fr: Dictionary = {
     payTitle: 'Payer avec PIX', paySubtitle: 'Scannez le QR code ou copiez le code dans votre application bancaire.',
     copyCode: 'Code PIX copier-coller', waiting: 'Votre solde est mis à jour automatiquement dès que le paiement est confirmé.',
     refresh: 'Actualiser le solde', hint: 'PIX est instantané — votre solde apparaît dès que nous confirmons le paiement.',
+    unavailableTitle: 'Pas encore disponible dans votre pays', unavailableBody: 'Le dépôt PIX est réservé au Brésil. Pour ajouter des fonds dans votre pays, contactez un agent Ticash. Carte et PayPal bientôt disponibles.',
   },
   profile: { language: 'Langue', theme: 'Apparence', security: 'Sécurité', kyc: 'Vérification', level: 'Niveau', logout: 'Se déconnecter' },
   agent: {
@@ -224,7 +227,7 @@ export const fr: Dictionary = {
     recipientName: 'Nom du destinataire', recipientNamePlaceholder: 'Nom complet', rail: 'Mode de réception',
     rate: 'Taux de change', fee: 'Frais', youPay: 'Vous payez', recipientGets: 'Le destinataire reçoit',
     enterAmount: 'Saisissez un montant pour voir le devis', noRate: 'Aucun taux pour ce corridor',
-    sent: 'Envoyé !', toRecipient: 'à {recipient}',
+    sent: 'Envoyé !', toRecipient: 'à {recipient}', toHaiti: 'Haïti',
   },
   activity: {
     send: 'Envoyé', deposit: 'Dépôt', cashIn: 'Dépôt (agent)', cashOut: 'Retrait', topup: 'Recharge', payout: 'Paiement', reversal: 'Remboursement',

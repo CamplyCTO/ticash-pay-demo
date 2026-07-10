@@ -2,19 +2,25 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, symbolOf, type Currency, type PayoutRail, type TransferPricing } from '@ticash/api-client';
+import { formatMoneyParts, isCustomerMe, symbolOf, type Currency, type PayoutRail, type TransferPricing } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
-import { messageForError, useQuote, useSendTransfer } from '@ticash/core';
+import { messageForError, useMe, useQuote, useSendTransfer } from '@ticash/core';
+import { currencyForCountry } from './auth/countries';
 
-const DEST: Currency[] = ['HTG', 'USD', 'MXN', 'DOP'];
-const FROM: Currency = 'BRL';
+// Ticash remits to Haiti; payout via MonCash / NatCash. Source currency follows
+// the sender's country (BR→BRL, MX→MXN, US→USD, DR→DOP) — the ledger prices every
+// {BRL,USD,MXN,DOP}→HTG corridor.
+const TO: Currency = 'HTG';
 
 export function SendScreen() {
   const t = useTheme();
   const { t: tr } = useI18n();
   const toast = useToast();
 
-  const [to, setTo] = useState<Currency>('HTG');
+  const { data: meData } = useMe();
+  const me = meData && isCustomerMe(meData) ? meData : null;
+  const from = currencyForCountry(me?.user.country) as Currency;
+  const to = TO;
   const [amount, setAmount] = useState('');
   const [debounced, setDebounced] = useState('');
   const [recipient, setRecipient] = useState('');
@@ -40,7 +46,7 @@ export function SendScreen() {
     return () => clearTimeout(id);
   }, [amount]);
 
-  const quote = useQuote(FROM, to, debounced);
+  const quote = useQuote(from, to, debounced);
   const amountValid = Number(amount) > 0;
   const recipientValid = recipient.trim().length >= 5;
   const recipientNameValid = recipientName.trim().length >= 2;
@@ -51,9 +57,9 @@ export function SendScreen() {
   const onSend = () => {
     if (!canSend) return;
     const payoutRail = railApplies ? rail : undefined;
-    const sig = `${FROM}|${to}|${amount}|${recipient.trim()}|${recipientName.trim()}|${payoutRail ?? ''}`;
+    const sig = `${from}|${to}|${amount}|${recipient.trim()}|${recipientName.trim()}|${payoutRail ?? ''}`;
     send.mutate(
-      { recipientRef: recipient.trim(), recipientName: recipientName.trim(), payoutRail, fromCurrency: FROM, toCurrency: to, sendAmount: amount, idempotencyKey: idemKeyFor(sig) },
+      { recipientRef: recipient.trim(), recipientName: recipientName.trim(), payoutRail, fromCurrency: from, toCurrency: to, sendAmount: amount, idempotencyKey: idemKeyFor(sig) },
       { onError: (e) => toast.error(messageForError(e, tr)) },
     );
   };
@@ -88,24 +94,21 @@ export function SendScreen() {
       <Text variant="title" style={{ marginTop: t.spacing(3), marginBottom: t.spacing(5) }}>{tr('send.title')}</Text>
 
       <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>{tr('send.destination')}</Text>
-      <Row gap={2} style={{ flexWrap: 'wrap', marginBottom: t.spacing(5) }}>
-        {DEST.map((c) => {
-          const active = c === to;
-          return (
-            <Pressable key={c} onPress={() => setTo(c)} style={{ paddingHorizontal: t.spacing(4), paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
-              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{c}</Text>
-            </Pressable>
-          );
-        })}
-      </Row>
+      <Card style={{ marginBottom: t.spacing(5), flexDirection: 'row', alignItems: 'center', gap: t.spacing(3) }}>
+        <Text variant="heading">🇭🇹</Text>
+        <View>
+          <Text variant="body" weight="semibold">{tr('send.toHaiti')}</Text>
+          <Text variant="caption" color="textMuted">{to}</Text>
+        </View>
+      </Card>
 
       <Input
-        label={`${tr('send.youSend')} (${FROM})`}
+        label={`${tr('send.youSend')} (${from})`}
         value={amount}
         onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))}
         keyboardType="decimal-pad"
         placeholder="0.00"
-        left={<Text weight="semibold" color="textMuted">{symbolOf(FROM)}</Text>}
+        left={<Text weight="semibold" color="textMuted">{symbolOf(from)}</Text>}
         containerStyle={{ marginBottom: t.spacing(4) }}
       />
 
@@ -150,7 +153,7 @@ export function SendScreen() {
           {quote.isLoading || debounced !== amount ? (
             <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>
           ) : quote.data ? (
-            <QuoteBody from={FROM} to={to} pricing={quote.data} />
+            <QuoteBody from={from} to={to} pricing={quote.data} />
           ) : (
             <Text variant="caption" color="danger" center>{tr('send.noRate')}</Text>
           )}

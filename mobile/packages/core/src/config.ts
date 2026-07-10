@@ -14,3 +14,12 @@ export const API_BASE_URL: string =
  */
 export const FEATURE_USDT: boolean =
   typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_FEATURE_USDT === '1';
+
+/**
+ * Airtime ("Recarga") top-up. Hidden in v1 until the DingConnect provider is
+ * provisioned (API key + whitelisted static IP) — otherwise the screen shows
+ * "no products available", which reads as broken to users and Play reviewers.
+ * Flip on with EXPO_PUBLIC_FEATURE_AIRTIME=1 once DingConnect is live.
+ */
+export const FEATURE_AIRTIME: boolean =
+  typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_FEATURE_AIRTIME === '1';

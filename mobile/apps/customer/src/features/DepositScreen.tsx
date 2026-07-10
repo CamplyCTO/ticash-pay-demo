@@ -3,7 +3,7 @@ import { Image, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatPlain } from '@ticash/api-client';
+import { formatPlain, isCustomerMe } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
 import { messageForError, useDepositPix, useMe } from '@ticash/core';
 
@@ -16,6 +16,10 @@ export function DepositScreen() {
   const router = useRouter();
   const deposit = useDepositPix();
   const me = useMe();
+  // PIX cash-in is Brazil-only (requires a CPF). Other countries fund via an agent
+  // (or card / PayPal, coming later) — never show the CPF form to a non-BR account.
+  const meData = me.data && isCustomerMe(me.data) ? me.data : null;
+  const pixAvailable = (meData?.user.country ?? 'BR') === 'BR';
 
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
@@ -68,6 +72,23 @@ export function DepositScreen() {
         <Text variant="caption" color="textMuted" style={{ textAlign: 'center', marginTop: t.spacing(4) }}>{tr('deposit.waiting')}</Text>
         <Button title={tr('deposit.refresh')} variant="secondary" loading={me.isFetching} style={{ marginTop: t.spacing(5) }} onPress={() => void me.refetch()} />
         <Button title={tr('common.back')} variant="ghost" style={{ marginTop: t.spacing(2) }} onPress={() => router.back()} />
+      </Screen>
+    );
+  }
+
+  // ---- non-Brazil: PIX unavailable (no CPF) -> point to an agent -----------
+  if (!pixAvailable) {
+    return (
+      <Screen scroll>
+        <Text variant="title" style={{ marginTop: t.spacing(3) }}>{tr('deposit.title')}</Text>
+        <Card style={{ marginTop: t.spacing(6), alignItems: 'center', gap: t.spacing(3), paddingVertical: t.spacing(7) }}>
+          <View style={{ width: 64, height: 64, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="business-outline" size={30} color={t.colors.primary} />
+          </View>
+          <Text variant="subheading" center>{tr('deposit.unavailableTitle')}</Text>
+          <Text variant="body" color="textMuted" center>{tr('deposit.unavailableBody')}</Text>
+        </Card>
+        <Button title={tr('common.back')} variant="ghost" style={{ marginTop: t.spacing(4) }} onPress={() => router.back()} />
       </Screen>
     );
   }
