@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Button, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
 import { useI18n } from '@ticash/i18n';
 import { messageForError, useAuthStore } from '@ticash/core';
-import { COUNTRIES } from './countries';
+import { COUNTRIES, SIGNUP_COUNTRIES } from './countries';
 
 export function SignUpScreen() {
   const t = useTheme();
@@ -51,17 +51,23 @@ export function SignUpScreen() {
 
       <Input label={tr('auth.name')} value={name} onChangeText={setName} placeholder={tr('auth.namePlaceholder')} autoCapitalize="words" containerStyle={{ marginBottom: t.spacing(4) }} />
 
-      <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>{tr('auth.country')}</Text>
-      <Row gap={2} style={{ flexWrap: 'wrap', marginBottom: t.spacing(4) }}>
-        {COUNTRIES.map((c) => {
-          const active = c.code === country;
-          return (
-            <Pressable key={c.code} onPress={() => pickCountry(c.code)} style={{ paddingHorizontal: t.spacing(3), paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
-              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{c.flag} {c.labelPt}</Text>
-            </Pressable>
-          );
-        })}
-      </Row>
+      {/* v1: single funding country (Brazil) → skip the picker; multi-country returns
+          automatically once SIGNUP_COUNTRIES lists more than one. */}
+      {SIGNUP_COUNTRIES.length > 1 ? (
+        <>
+          <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>{tr('auth.country')}</Text>
+          <Row gap={2} style={{ flexWrap: 'wrap', marginBottom: t.spacing(4) }}>
+            {SIGNUP_COUNTRIES.map((c) => {
+              const active = c.code === country;
+              return (
+                <Pressable key={c.code} onPress={() => pickCountry(c.code)} style={{ paddingHorizontal: t.spacing(3), paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
+                  <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{c.flag} {c.labelPt}</Text>
+                </Pressable>
+              );
+            })}
+          </Row>
+        </>
+      ) : null}
 
       <Input label={tr('auth.phoneLabel')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+55 11 99999-9999" containerStyle={{ marginBottom: t.spacing(4) }} />
       <Input label={`${tr('auth.email')} (${tr('common.optional')})`} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="voce@email.com" containerStyle={{ marginBottom: t.spacing(4) }} />
