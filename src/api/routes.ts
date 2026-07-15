@@ -171,12 +171,13 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     // All offers (active shown to the panel) + orders by status for monitoring.
     app.get('/p2p/offers', async () => p2p.listActiveOffers());
     app.get('/p2p/orders', async (req) => {
-      const q = z.object({ status: z.enum(['created', 'payment_submitted', 'released', 'cancelled', 'disputed']).optional() }).parse(req.query);
+      const q = z.object({ status: z.enum(['all', 'created', 'payment_submitted', 'released', 'cancelled', 'disputed']).optional() }).parse(req.query);
       // Default view: everything needing attention (submitted + disputed).
       if (!q.status) {
         const [submitted, disputed] = await Promise.all([p2p.listOrdersByStatus('payment_submitted'), p2p.listOrdersByStatus('disputed')]);
         return [...disputed, ...submitted];
       }
+      if (q.status === 'all') return p2p.listAllOrders();
       return p2p.listOrdersByStatus(q.status);
     });
     // Submitted orders past their confirm window — the central can step in.

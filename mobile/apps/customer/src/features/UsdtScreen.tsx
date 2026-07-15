@@ -2,17 +2,32 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, type P2POffer, type P2POrder } from '@ticash/api-client';
+import { formatMoneyParts, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod } from '@ticash/api-client';
 import {
   messageForError,
   useOpenP2POrder,
   useP2POffers,
+  useMyP2POffers,
+  useCreateP2POffer,
+  useCloseP2POffer,
   useP2POrders,
   useP2PPay,
   useDisputeP2POrder,
   useCancelP2POrder,
 } from '@ticash/core';
 import { useI18n } from '@ticash/i18n';
+
+// Payment methods a seller can accept (expandable). Jean's set: PIX / MonCash /
+// NatCash / Zelle / bank transfer.
+const METHOD_OPTIONS: { type: string; label: string }[] = [
+  { type: 'pix', label: 'PIX' },
+  { type: 'moncash', label: 'MonCash' },
+  { type: 'natcash', label: 'NatCash' },
+  { type: 'zelle', label: 'Zelle' },
+  { type: 'bank', label: 'Transferência bancária' },
+];
+// Fiat currencies a seller can price/receive in (one per offer).
+const FIATS: Currency[] = ['BRL', 'HTG', 'USD', 'MXN', 'DOP'];
 
 // NOTE: this WS-4 MVP screen uses literal PT copy (the primary market). FR/EN
 // i18n keys + image-picker proof upload are a documented follow-up.
@@ -23,6 +38,16 @@ const money = (minor: string, ccy: 'USDT' | string) => {
   return `${p.symbol}${p.integer},${frac}`;
 };
 
+/** Human "min – max" per-order limit line for an offer (null when unlimited). */
+const limitsLabel = (o: P2POffer): string | null => {
+  const lo = o.minFiatMinor ? money(o.minFiatMinor, o.fiatCurrency) : null;
+  const hi = o.maxFiatMinor ? money(o.maxFiatMinor, o.fiatCurrency) : null;
+  if (lo && hi) return `Limite ${lo} – ${hi} ${o.fiatCurrency}`;
+  if (lo) return `Mín. ${lo} ${o.fiatCurrency}`;
+  if (hi) return `Máx. ${hi} ${o.fiatCurrency}`;
+  return null;
+};
+
 const STATUS_LABEL: Record<P2POrder['status'], string> = {
   created: 'Aguardando seu pagamento',
   payment_submitted: 'Aguardando o vendedor confirmar',
@@ -31,24 +56,26 @@ const STATUS_LABEL: Record<P2POrder['status'], string> = {
   disputed: 'Em análise (central)',
 };
 
+const TAB_LABEL: Record<'buy' | 'sell' | 'orders', string> = { buy: 'Comprar', sell: 'Vender', orders: 'Minhas ordens' };
+
 export function UsdtScreen() {
   const t = useTheme();
-  const [tab, setTab] = useState<'buy' | 'orders'>('buy');
+  const [tab, setTab] = useState<'buy' | 'sell' | 'orders'>('buy');
 
   return (
     <Screen scroll>
       <Text variant="title" style={{ marginTop: t.spacing(3), marginBottom: t.spacing(4) }}>USDT</Text>
       <Row gap={2} style={{ marginBottom: t.spacing(4) }}>
-        {(['buy', 'orders'] as const).map((k) => {
+        {(['buy', 'sell', 'orders'] as const).map((k) => {
           const active = k === tab;
           return (
             <Pressable key={k} onPress={() => setTab(k)} style={{ flex: 1, alignItems: 'center', paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
-              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{k === 'buy' ? 'Comprar' : 'Minhas ordens'}</Text>
+              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{TAB_LABEL[k]}</Text>
             </Pressable>
           );
         })}
       </Row>
-      {tab === 'buy' ? <BuyTab /> : <OrdersTab />}
+      {tab === 'buy' ? <BuyTab /> : tab === 'sell' ? <SellTab /> : <OrdersTab />}
     </Screen>
   );
 }
@@ -71,10 +98,11 @@ function BuyTab() {
       {active.map((o) => (
         <Card key={o.id}>
           <Row style={{ justifyContent: 'space-between' }}>
-            <View>
+            <View style={{ flex: 1, paddingRight: t.spacing(2) }}>
               <Text variant="body" weight="bold">{`${o.pricePerUnit} ${o.fiatCurrency} / USDT`}</Text>
               <Text variant="caption" color="textMuted">{`Disponível: ${money(o.remainingMinor, 'USDT')} USDT`}</Text>
-              <Text variant="caption" color="textMuted">{o.methods.map((m) => m.label).join(' · ')}</Text>
+              {limitsLabel(o) ? <Text variant="caption" color="textMuted">{limitsLabel(o)}</Text> : null}
+              <Text variant="caption" color="textMuted">{`${o.methods.map((m) => m.label).join(' · ')} · pague em ${o.payWindowMin} min`}</Text>
             </View>
             <Button title="Comprar" onPress={() => setSelected(o)} />
           </Row>
@@ -134,6 +162,9 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
       <Card style={{ marginBottom: t.spacing(4) }}>
         <Line label="Preço" value={`${offer.pricePerUnit} ${offer.fiatCurrency} / USDT`} />
         <Line label="Disponível" value={`${money(offer.remainingMinor, 'USDT')} USDT`} />
+        {limitsLabel(offer) ? <Line label="Limite" value={limitsLabel(offer) as string} /> : null}
+        <Line label="Prazo p/ pagar" value={`${offer.payWindowMin} min`} />
+        <Line label="Pagamento" value={offer.methods.map((m) => m.label).join(' · ')} />
       </Card>
       <Input label="Quanto de USDT" value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} keyboardType="decimal-pad" placeholder="0.00" />
       <Card style={{ marginTop: t.spacing(4) }}>
@@ -173,6 +204,146 @@ function OrdersTab() {
           </Row>
         </Card>
       ))}
+    </View>
+  );
+}
+
+// ---- Sell: seller lists USDT + configures the offer ----------------------
+function SellTab() {
+  const t = useTheme();
+  const toast = useToast();
+  const { t: tr } = useI18n();
+  const myOffers = useMyP2POffers();
+  const close = useCloseP2POffer();
+  const [creating, setCreating] = useState(false);
+
+  if (creating) return <SellForm onDone={() => setCreating(false)} />;
+
+  const offers = (myOffers.data ?? []).filter((o) => o.status === 'active');
+  return (
+    <View style={{ gap: t.spacing(3) }}>
+      <Button title="+ Criar anúncio de venda" onPress={() => setCreating(true)} />
+      {myOffers.isLoading ? (
+        <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>
+      ) : offers.length === 0 ? (
+        <EmptyState title="Você ainda não tem anúncios" icon={<Ionicons name="pricetag-outline" size={26} color={t.colors.primary} />} />
+      ) : (
+        offers.map((o) => (
+          <Card key={o.id}>
+            <Row style={{ justifyContent: 'space-between' }}>
+              <View style={{ flex: 1, paddingRight: t.spacing(2) }}>
+                <Text variant="body" weight="bold">{`${o.pricePerUnit} ${o.fiatCurrency} / USDT`}</Text>
+                <Text variant="caption" color="textMuted">{`Restam ${money(o.remainingMinor, 'USDT')} USDT`}</Text>
+                {limitsLabel(o) ? <Text variant="caption" color="textMuted">{limitsLabel(o)}</Text> : null}
+                <Text variant="caption" color="textMuted">{`${o.methods.map((m) => m.label).join(' · ')} · ${o.payWindowMin} min`}</Text>
+              </View>
+              <Button variant="ghost" title="Encerrar" onPress={() => close.mutate(o.id, { onSuccess: () => toast.success('Anúncio encerrado — USDT devolvido'), onError: (e) => toast.error(messageForError(e, tr)) })} />
+            </Row>
+          </Card>
+        ))
+      )}
+    </View>
+  );
+}
+
+function SellForm({ onDone }: { onDone: () => void }) {
+  const t = useTheme();
+  const toast = useToast();
+  const { t: tr } = useI18n();
+  const create = useCreateP2POffer();
+
+  const [amount, setAmount] = useState('');
+  const [fiat, setFiat] = useState<Currency>('BRL');
+  const [price, setPrice] = useState('');
+  const [min, setMin] = useState('');
+  const [max, setMax] = useState('');
+  const [win, setWin] = useState('15');
+  const [methods, setMethods] = useState<Record<string, string>>({}); // type -> account (key present = selected)
+
+  const dec = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+  const toggle = (type: string) => setMethods((m) => { const n = { ...m }; if (type in n) delete n[type]; else n[type] = ''; return n; });
+  const setAccount = (type: string, account: string) => setMethods((m) => ({ ...m, [type]: account }));
+
+  const selectedMethods: P2PPaymentMethod[] = METHOD_OPTIONS
+    .filter((o) => o.type in methods && methods[o.type].trim().length > 0)
+    .map((o) => ({ type: o.type, label: o.label, account: methods[o.type].trim() }));
+
+  const minN = Number(min || '0');
+  const maxN = Number(max || '0');
+  const valid =
+    Number(amount) > 0 && Number(price) > 0 && selectedMethods.length > 0 &&
+    Number(win) >= 1 && Number(win) <= 1440 &&
+    (!(min && max) || minN <= maxN);
+
+  const submit = () => {
+    if (!valid || create.isPending) return;
+    create.mutate(
+      {
+        fiatCurrency: fiat,
+        pricePerUnit: price.trim(),
+        amount: amount.trim(),
+        ...(min.trim() ? { minAmount: min.trim() } : {}),
+        ...(max.trim() ? { maxAmount: max.trim() } : {}),
+        payWindowMin: Number(win),
+        methods: selectedMethods,
+      },
+      { onSuccess: () => { toast.success('Anúncio publicado!'); onDone(); }, onError: (e) => toast.error(messageForError(e, tr)) },
+    );
+  };
+
+  return (
+    <View style={{ gap: t.spacing(4) }}>
+      <Pressable onPress={onDone}><Text color="primary">‹ Voltar</Text></Pressable>
+      <Text variant="subheading">Criar anúncio de venda</Text>
+
+      <Input label="Quantidade de USDT" value={amount} onChangeText={(v) => setAmount(dec(v))} keyboardType="decimal-pad" placeholder="0.00" />
+
+      <View>
+        <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>Moeda que você recebe</Text>
+        <Row gap={2} style={{ flexWrap: 'wrap' }}>
+          {FIATS.map((c) => {
+            const active = c === fiat;
+            return (
+              <Pressable key={c} onPress={() => setFiat(c)} style={{ paddingHorizontal: t.spacing(3.5), paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
+                <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{c}</Text>
+              </Pressable>
+            );
+          })}
+        </Row>
+      </View>
+
+      <Input label={`Preço por USDT (${fiat})`} value={price} onChangeText={(v) => setPrice(dec(v))} keyboardType="decimal-pad" placeholder="0.00" />
+
+      <Row gap={3}>
+        <Input containerStyle={{ flex: 1 }} label={`Mín. (${fiat})`} value={min} onChangeText={(v) => setMin(dec(v))} keyboardType="decimal-pad" placeholder="opcional" />
+        <Input containerStyle={{ flex: 1 }} label={`Máx. (${fiat})`} value={max} onChangeText={(v) => setMax(dec(v))} keyboardType="decimal-pad" placeholder="opcional" />
+      </Row>
+
+      <Input label="Tempo para o comprador pagar (min)" value={win} onChangeText={(v) => setWin(v.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder="15" />
+
+      <View>
+        <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>Formas de pagamento aceitas</Text>
+        <View style={{ gap: t.spacing(2) }}>
+          {METHOD_OPTIONS.map((m) => {
+            const on = m.type in methods;
+            return (
+              <View key={m.type}>
+                <Pressable onPress={() => toggle(m.type)} style={{ flexDirection: 'row', alignItems: 'center', gap: t.spacing(2), paddingVertical: t.spacing(1) }}>
+                  <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: on ? t.colors.primary : t.colors.border, backgroundColor: on ? t.colors.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                    {on ? <Ionicons name="checkmark" size={15} color={t.colors.onPrimary} /> : null}
+                  </View>
+                  <Text variant="body" weight="semibold">{m.label}</Text>
+                </Pressable>
+                {on ? (
+                  <Input value={methods[m.type]} onChangeText={(v) => setAccount(m.type, v)} placeholder={`Conta / chave ${m.label}`} containerStyle={{ marginTop: t.spacing(1), marginLeft: t.spacing(7) }} />
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      </View>
+
+      <Button title="Publicar anúncio" disabled={!valid} loading={create.isPending} onPress={submit} />
     </View>
   );
 }

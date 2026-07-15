@@ -22,8 +22,8 @@ export function currencyForCountry(code?: string | null): Currency {
 }
 
 /**
- * Countries offered at signup in v1 — only where funding is live (Brazil / PIX).
- * The others stay in COUNTRIES (currency logic keeps working) and are re-enabled
- * here one by one as each country's cash-in rail goes live.
+ * Countries offered at signup. Users pick their country → it sets the account's
+ * home currency and phone dial prefix (the phone receives the first-access OTP).
+ * Non-Brazil users fund/trade via the P2P USDT marketplace with local methods.
  */
-export const SIGNUP_COUNTRIES: Country[] = COUNTRIES.filter((c) => c.code === 'BR');
+export const SIGNUP_COUNTRIES: Country[] = COUNTRIES;

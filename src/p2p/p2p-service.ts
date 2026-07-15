@@ -12,6 +12,10 @@ export interface P2PConfig {
   confirmWindowMinutes: number;
 }
 
+/** Default minutes a buyer has to pay after opening an order (when the seller
+ *  doesn't set one on the offer). Independent of the seller-confirm window. */
+const DEFAULT_PAY_WINDOW_MIN = 15;
+
 /**
  * Orchestrates the P2P USDT marketplace over the ledger (escrow) + the P2P store
  * (offers/orders). Every money movement is a balanced ledger journal; the store
@@ -37,6 +41,9 @@ export class P2PService {
     fiatCurrency: Currency;
     pricePerUnit: string;
     totalMinor: bigint;
+    minFiatMinor?: bigint | null;
+    maxFiatMinor?: bigint | null;
+    payWindowMin?: number;
     methods: PaymentMethod[];
   }): Promise<Offer> {
     if (args.totalMinor <= 0n) throw new P2PError('amount must be positive', 'VALIDATION');
@@ -46,6 +53,15 @@ export class P2PService {
     }
     assertRate(args.pricePerUnit);
     if (args.fiatCurrency === this.cfg.asset) throw new P2PError('fiat currency must differ from the asset', 'VALIDATION');
+
+    // Optional per-order fiat limits + the buyer's payment window.
+    const minFiatMinor = args.minFiatMinor ?? null;
+    const maxFiatMinor = args.maxFiatMinor ?? null;
+    if (minFiatMinor !== null && minFiatMinor < 0n) throw new P2PError('minimum cannot be negative', 'VALIDATION');
+    if (maxFiatMinor !== null && maxFiatMinor <= 0n) throw new P2PError('maximum must be positive', 'VALIDATION');
+    if (minFiatMinor !== null && maxFiatMinor !== null && minFiatMinor > maxFiatMinor) throw new P2PError('minimum cannot exceed maximum', 'VALIDATION');
+    const payWindowMin = args.payWindowMin ?? DEFAULT_PAY_WINDOW_MIN;
+    if (!Number.isInteger(payWindowMin) || payWindowMin < 1 || payWindowMin > 1440) throw new P2PError('payment window must be 1..1440 minutes', 'VALIDATION');
 
     const id = randomUUID();
     // Lock first: this validates the seller actually holds the USDT (the wallet
@@ -59,6 +75,9 @@ export class P2PService {
         fiatCurrency: args.fiatCurrency,
         pricePerUnit: args.pricePerUnit,
         totalMinor: args.totalMinor,
+        minFiatMinor,
+        maxFiatMinor,
+        payWindowMin,
         methods: args.methods,
       });
     } catch (err) {
@@ -108,6 +127,14 @@ export class P2PService {
     const netToBuyerMinor = args.assetMinor - commissionMinor;
     const fiatMinor = convert(args.assetMinor, offer.asset, offer.fiatCurrency, offer.pricePerUnit);
 
+    // Enforce the seller's per-order fiat limits.
+    if (offer.minFiatMinor !== null && fiatMinor < offer.minFiatMinor) throw new P2PError('below the offer minimum', 'VALIDATION');
+    if (offer.maxFiatMinor !== null && fiatMinor > offer.maxFiatMinor) throw new P2PError('above the offer maximum', 'VALIDATION');
+
+    // Buyer must pay within the offer's payment window (advisory deadline surfaced
+    // to the buyer + admin; escrow stays reserved until pay/cancel/expiry).
+    const timeoutAt = new Date(Date.now() + offer.payWindowMin * 60_000).toISOString();
+
     return this.store.createOrder({
       id: randomUUID(),
       offerId: offer.id,
@@ -121,7 +148,7 @@ export class P2PService {
       fiatMinor,
       pricePerUnit: offer.pricePerUnit,
       method,
-      timeoutAt: null,
+      timeoutAt,
     });
   }
 
@@ -169,6 +196,10 @@ export class P2PService {
 
   listOrdersByStatus(status: Order['status']): Promise<Order[]> {
     return this.store.listOrdersByStatus(status);
+  }
+  /** Every order (all statuses), newest first — admin settlement oversight. */
+  listAllOrders(): Promise<Order[]> {
+    return this.store.listAllOrders();
   }
   /** Submitted orders past their confirm window — candidates for admin action. */
   async listExpired(): Promise<Order[]> {

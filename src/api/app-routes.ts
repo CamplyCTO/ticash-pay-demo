@@ -316,10 +316,22 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         fiatCurrency: currencySchema,
         pricePerUnit: z.string().min(1),
         amount: amountSchema, // USDT
+        minAmount: amountSchema.optional(), // per-order fiat floor
+        maxAmount: amountSchema.optional(), // per-order fiat cap
+        payWindowMin: z.number().int().min(1).max(1440).optional(),
         methods: z.array(methodSchema).min(1).max(6),
       }).parse(req.body);
       reply.status(201);
-      return p2p.createOffer({ merchantId: me.externalId, fiatCurrency: b.fiatCurrency, pricePerUnit: b.pricePerUnit, totalMinor: money(b.amount, 'USDT'), methods: b.methods });
+      return p2p.createOffer({
+        merchantId: me.externalId,
+        fiatCurrency: b.fiatCurrency,
+        pricePerUnit: b.pricePerUnit,
+        totalMinor: money(b.amount, 'USDT'),
+        minFiatMinor: b.minAmount !== undefined ? money(b.minAmount, b.fiatCurrency) : null,
+        maxFiatMinor: b.maxAmount !== undefined ? money(b.maxAmount, b.fiatCurrency) : null,
+        ...(b.payWindowMin !== undefined ? { payWindowMin: b.payWindowMin } : {}),
+        methods: b.methods,
+      });
     });
     app.post('/app/p2p/offers/:id/close', async (req) => {
       const me = await requireCustomer(req);

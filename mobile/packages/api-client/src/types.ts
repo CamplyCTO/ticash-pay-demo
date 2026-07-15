@@ -171,6 +171,9 @@ export interface P2POffer {
   pricePerUnit: string;
   totalMinor: string;
   remainingMinor: string;
+  minFiatMinor: string | null; // per-order minimum (fiat); null = no floor
+  maxFiatMinor: string | null; // per-order maximum (fiat); null = no cap
+  payWindowMin: number; // minutes the buyer has to pay after opening an order
   methods: P2PPaymentMethod[];
   status: P2POfferStatus;
   createdAt: string;
@@ -201,6 +204,9 @@ export interface CreateOfferInput {
   fiatCurrency: Currency;
   pricePerUnit: string;
   amount: string; // USDT
+  minAmount?: string; // per-order fiat floor (optional)
+  maxAmount?: string; // per-order fiat cap (optional)
+  payWindowMin?: number; // buyer payment window in minutes (optional)
   methods: P2PPaymentMethod[];
 }
 

@@ -124,10 +124,16 @@
       </div>
 
       <div class="panel">
-        <h2>🪙 P2P USDT · ordens (atenção)</h2>
-        <div class="body" style="max-height:260px; overflow:auto">
-          <table><thead><tr><th>ordem</th><th>comprador</th><th class="num">USDT</th><th>status</th><th>método</th></tr></thead><tbody id="p2porders"></tbody></table>
-          <div class="muted" style="margin-top:8px">Ordens <b>disputed</b> / <b>payment_submitted</b>. Confira o comprovante e use <b>Resolver ordem P2P</b> — <b>release</b> libera o USDT ao comprador, <b>cancel</b> devolve a reserva ao vendedor. Deposite USDT ao vendedor em <b>Depositar USDT</b>.</div>
+        <h2>🪙 P2P USDT · liquidações (quem vende / quem compra)</h2>
+        <div class="body" style="max-height:320px; overflow:auto">
+          <table><thead><tr><th>ordem</th><th>vendedor</th><th>comprador</th><th class="num">USDT</th><th class="num">valor</th><th>status</th><th>método</th><th>data</th></tr></thead><tbody id="p2porders"></tbody></table>
+          <div class="muted" style="margin-top:8px">Todas as ordens (mais recentes primeiro). <b>released</b> = liquidada (USDT foi do vendedor ao comprador). Para <b>disputed</b> / <b>payment_submitted</b>: confira o comprovante e use <b>Resolver ordem P2P</b> — <b>release</b> libera ao comprador, <b>cancel</b> devolve a reserva ao vendedor.</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>🏷️ P2P USDT · anúncios ativos</h2>
+        <div class="body" style="max-height:240px; overflow:auto">
+          <table><thead><tr><th>vendedor</th><th class="num">preço</th><th class="num">restam</th><th class="num">limites</th><th class="num">prazo</th><th>métodos</th></tr></thead><tbody id="p2poffers"></tbody></table>
         </div>
       </div>
 
@@ -231,16 +237,32 @@ async function refresh() {
         <td class="num cr">${net.toFixed(2)} ${r.toCurrency}</td></tr>`; }).join('') || '<tr><td colspan=6 class="muted">sem taxas</td></tr>';
     } catch (_) { /* fx not wired */ }
 
-    // P2P USDT orders needing attention (submitted + disputed).
+    // P2P USDT — ALL settlements (who sells to whom) + active offers.
     try {
-      const orders = await api('GET','/p2p/orders');
+      const orders = await api('GET','/p2p/orders?status=all');
       const ost = (s) => ({disputed:'red',payment_submitted:'amber',released:'em',cancelled:'gray',created:'blue'}[s] || 'gray');
       $('p2porders').innerHTML = orders.map(o => `<tr>
-        <td class="mono" style="font-size:9px">${o.id}</td>
+        <td class="mono" style="font-size:9px">${String(o.id).slice(0,8)}</td>
+        <td class="muted">${o.merchantId}</td>
         <td class="muted">${o.buyerId}</td>
-        <td class="num">${(Number(o.assetMinor)/1e6).toFixed(2)}</td>
+        <td class="num">${fmt(o.assetMinor,'USDT')}</td>
+        <td class="num">${fmt(o.fiatMinor,o.fiatCurrency)} ${o.fiatCurrency}</td>
         <td><span class="chip ${ost(o.status)}">${o.status}</span></td>
-        <td class="muted">${(o.method && o.method.label) || '-'}</td></tr>`).join('') || '<tr><td colspan=5 class="muted">nenhuma ordem pendente</td></tr>';
+        <td class="muted">${(o.method && o.method.label) || '-'}</td>
+        <td class="muted" style="font-size:9px">${new Date(o.createdAt).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan=8 class="muted">nenhuma ordem</td></tr>';
+
+      const offers = await api('GET','/p2p/offers');
+      $('p2poffers').innerHTML = offers.map(o => {
+        const lim = (o.minFiatMinor || o.maxFiatMinor)
+          ? `${o.minFiatMinor?fmt(o.minFiatMinor,o.fiatCurrency):'0'}–${o.maxFiatMinor?fmt(o.maxFiatMinor,o.fiatCurrency):'∞'}`
+          : '—';
+        return `<tr>
+        <td class="muted">${o.merchantId}</td>
+        <td class="num">${o.pricePerUnit} ${o.fiatCurrency}</td>
+        <td class="num">${fmt(o.remainingMinor,'USDT')}</td>
+        <td class="num">${lim}</td>
+        <td class="num">${o.payWindowMin}m</td>
+        <td class="muted">${(o.methods||[]).map(m=>m.label).join(' · ')}</td></tr>`; }).join('') || '<tr><td colspan=6 class="muted">nenhum anúncio</td></tr>';
     } catch (_) { /* p2p not wired */ }
   } catch (e) {
     $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';

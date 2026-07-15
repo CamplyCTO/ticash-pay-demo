@@ -35,6 +35,9 @@ export interface Offer {
   pricePerUnit: string; // fiat per 1 whole unit of asset (decimal string)
   totalMinor: bigint; // asset originally listed
   remainingMinor: bigint; // asset still available (not reserved by open orders)
+  minFiatMinor: bigint | null; // per-order minimum the buyer must pay (fiat); null = no floor
+  maxFiatMinor: bigint | null; // per-order maximum the buyer may pay (fiat); null = no cap
+  payWindowMin: number; // minutes the buyer has to pay after opening an order
   methods: PaymentMethod[];
   status: OfferStatus;
   createdAt: string;
@@ -68,6 +71,9 @@ export interface NewOffer {
   fiatCurrency: Currency;
   pricePerUnit: string;
   totalMinor: bigint;
+  minFiatMinor: bigint | null;
+  maxFiatMinor: bigint | null;
+  payWindowMin: number;
   methods: PaymentMethod[];
 }
 

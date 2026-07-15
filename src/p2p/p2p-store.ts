@@ -41,6 +41,8 @@ export interface P2PStore {
   listOrdersByBuyer(buyerId: string): Promise<Order[]>;
   listOrdersByMerchant(merchantId: string): Promise<Order[]>;
   listOrdersByStatus(status: OrderStatus): Promise<Order[]>;
+  /** All orders, newest first — admin oversight of every settlement. */
+  listAllOrders(): Promise<Order[]>;
   updateOrder(id: string, patch: OrderPatch): Promise<Order>;
   /**
    * Atomically apply `patch` (including the new status) ONLY IF the order's
@@ -122,6 +124,9 @@ export class InMemoryP2PStore implements P2PStore {
   async listOrdersByStatus(status: OrderStatus): Promise<Order[]> {
     return [...this.orders.values()].filter((o) => o.status === status).map(clone);
   }
+  async listAllOrders(): Promise<Order[]> {
+    return [...this.orders.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map(clone);
+  }
   async updateOrder(id: string, patch: OrderPatch): Promise<Order> {
     const o = this.orders.get(id);
     if (!o) throw new P2PError(`order ${id} not found`, 'NOT_FOUND');
@@ -172,10 +177,10 @@ export class PgP2PStore implements P2PStore {
 
   async createOffer(o: NewOffer): Promise<Offer> {
     const res = await this.pool.query(
-      `INSERT INTO p2p_offers (offer_uid, merchant_id, asset, fiat_currency, price_per_unit, total_minor, remaining_minor, methods)
-       VALUES ($1,$2,$3,$4,$5,$6,$6,$7)
+      `INSERT INTO p2p_offers (offer_uid, merchant_id, asset, fiat_currency, price_per_unit, total_minor, remaining_minor, min_fiat_minor, max_fiat_minor, pay_window_min, methods)
+       VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10)
        RETURNING *`,
-      [o.id, o.merchantId, o.asset, o.fiatCurrency, o.pricePerUnit, o.totalMinor.toString(), JSON.stringify(o.methods)],
+      [o.id, o.merchantId, o.asset, o.fiatCurrency, o.pricePerUnit, o.totalMinor.toString(), o.minFiatMinor === null ? null : o.minFiatMinor.toString(), o.maxFiatMinor === null ? null : o.maxFiatMinor.toString(), o.payWindowMin, JSON.stringify(o.methods)],
     );
     return mapOffer(res.rows[0]);
   }
@@ -240,6 +245,10 @@ export class PgP2PStore implements P2PStore {
   }
   async listOrdersByStatus(status: OrderStatus): Promise<Order[]> {
     const res = await this.pool.query(`SELECT * FROM p2p_orders WHERE status = $1 ORDER BY created_at DESC`, [status]);
+    return res.rows.map(mapOrder);
+  }
+  async listAllOrders(): Promise<Order[]> {
+    const res = await this.pool.query(`SELECT * FROM p2p_orders ORDER BY created_at DESC LIMIT 500`);
     return res.rows.map(mapOrder);
   }
   async updateOrder(id: string, patch: OrderPatch): Promise<Order> {
@@ -319,6 +328,9 @@ function mapOffer(r: any): Offer {
     pricePerUnit: r.price_per_unit,
     totalMinor: BigInt(r.total_minor),
     remainingMinor: BigInt(r.remaining_minor),
+    minFiatMinor: r.min_fiat_minor === null || r.min_fiat_minor === undefined ? null : BigInt(r.min_fiat_minor),
+    maxFiatMinor: r.max_fiat_minor === null || r.max_fiat_minor === undefined ? null : BigInt(r.max_fiat_minor),
+    payWindowMin: r.pay_window_min ?? 15,
     methods: (typeof r.methods === 'string' ? JSON.parse(r.methods) : r.methods) as PaymentMethod[],
     status: r.status,
     createdAt: r.created_at.toISOString(),
