@@ -14,6 +14,7 @@ import {
   useP2PPay,
   useDisputeP2POrder,
   useCancelP2POrder,
+  useUsdtDeposit,
 } from '@ticash/core';
 import { useI18n } from '@ticash/i18n';
 
@@ -56,26 +57,27 @@ const STATUS_LABEL: Record<P2POrder['status'], string> = {
   disputed: 'Em análise (central)',
 };
 
-const TAB_LABEL: Record<'buy' | 'sell' | 'orders', string> = { buy: 'Comprar', sell: 'Vender', orders: 'Minhas ordens' };
+type UsdtTab = 'buy' | 'sell' | 'deposit' | 'orders';
+const TAB_LABEL: Record<UsdtTab, string> = { buy: 'Comprar', sell: 'Vender', deposit: 'Depositar', orders: 'Ordens' };
 
 export function UsdtScreen() {
   const t = useTheme();
-  const [tab, setTab] = useState<'buy' | 'sell' | 'orders'>('buy');
+  const [tab, setTab] = useState<UsdtTab>('buy');
 
   return (
     <Screen scroll>
       <Text variant="title" style={{ marginTop: t.spacing(3), marginBottom: t.spacing(4) }}>USDT</Text>
       <Row gap={2} style={{ marginBottom: t.spacing(4) }}>
-        {(['buy', 'sell', 'orders'] as const).map((k) => {
+        {(['buy', 'sell', 'deposit', 'orders'] as const).map((k) => {
           const active = k === tab;
           return (
             <Pressable key={k} onPress={() => setTab(k)} style={{ flex: 1, alignItems: 'center', paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
-              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{TAB_LABEL[k]}</Text>
+              <Text variant="caption" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{TAB_LABEL[k]}</Text>
             </Pressable>
           );
         })}
       </Row>
-      {tab === 'buy' ? <BuyTab /> : tab === 'sell' ? <SellTab /> : <OrdersTab />}
+      {tab === 'buy' ? <BuyTab /> : tab === 'sell' ? <SellTab /> : tab === 'deposit' ? <DepositTab /> : <OrdersTab />}
     </Screen>
   );
 }
@@ -344,6 +346,55 @@ function SellForm({ onDone }: { onDone: () => void }) {
       </View>
 
       <Button title="Publicar anúncio" disabled={!valid} loading={create.isPending} onPress={submit} />
+    </View>
+  );
+}
+
+// ---- Deposit: on-ramp USDT from an external crypto wallet -----------------
+function DepositTab() {
+  const t = useTheme();
+  const toast = useToast();
+  const { t: tr } = useI18n();
+  const deposit = useUsdtDeposit();
+  const [amount, setAmount] = useState('');
+  const [addr, setAddr] = useState<{ payAddress: string; payAmount: string; payCurrency: string } | null>(null);
+
+  if (addr) {
+    const net = addr.payCurrency.toUpperCase();
+    return (
+      <View style={{ gap: t.spacing(4) }}>
+        <Pressable onPress={() => setAddr(null)}><Text color="primary">‹ Voltar</Text></Pressable>
+        <Text variant="subheading">Envie USDT para este endereço</Text>
+        <Card style={{ gap: t.spacing(3) }}>
+          <View>
+            <Text variant="caption" color="textMuted">Valor a enviar</Text>
+            <Text variant="heading">{addr.payAmount} {net}</Text>
+          </View>
+          <View>
+            <Text variant="caption" color="textMuted" style={{ marginBottom: t.spacing(1) }}>{`Endereço (${net})`}</Text>
+            <View style={{ borderWidth: 1, borderColor: t.colors.divider, borderRadius: t.radius.md, padding: t.spacing(3) }}>
+              <Text selectable variant="caption">{addr.payAddress}</Text>
+            </View>
+          </View>
+        </Card>
+        <Text variant="caption" color="textMuted">
+          {`Envie exatamente esse valor de USDT (rede ${net}) da sua carteira/corretora para o endereço acima. Seu saldo USDT aparece assim que a rede confirmar.`}
+        </Text>
+        <Button title="Já enviei" variant="secondary" onPress={() => { toast.success('Assim que a rede confirmar, seu saldo USDT aparece.'); setAddr(null); }} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: t.spacing(4) }}>
+      <Text variant="body" color="textMuted">Adicione USDT à sua carteira Ticash a partir de uma carteira/corretora cripto (ex.: Binance). Depois você pode vender no P2P.</Text>
+      <Input label="Quanto de USDT" value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} keyboardType="decimal-pad" placeholder="0.00" />
+      <Button title="Gerar endereço de depósito" disabled={Number(amount) <= 0 || deposit.isPending} loading={deposit.isPending} onPress={() => {
+        deposit.mutate(amount.trim(), {
+          onSuccess: (r) => setAddr({ payAddress: r.payAddress, payAmount: r.payAmount, payCurrency: r.payCurrency }),
+          onError: (e) => toast.error(messageForError(e, tr)),
+        });
+      }} />
     </View>
   );
 }

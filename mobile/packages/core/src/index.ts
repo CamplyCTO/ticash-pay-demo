@@ -13,6 +13,7 @@ export {
   useAirtimeTopup,
   useKycStart,
   useDepositPix,
+  useUsdtDeposit,
   useLookupCustomer,
   useAgentCashIn,
   useAgentCashOut,

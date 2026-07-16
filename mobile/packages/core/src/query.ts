@@ -83,6 +83,14 @@ export function useDepositPix() {
     },
   });
 }
+/** USDT on-ramp: get a crypto deposit address (NOWPayments); wallet credits on settlement. */
+export function useUsdtDeposit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (amount: string) => api.usdtDeposit(amount),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['me'] }),
+  });
+}
 
 // ---- agent (WS-3) ----
 export function useLookupCustomer() {
