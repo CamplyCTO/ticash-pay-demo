@@ -21,4 +21,7 @@ COPY db ./db
 # Render/Railway inject PORT; the app reads it (default 3000). Bind all interfaces.
 ENV HOST=0.0.0.0
 EXPOSE 3000
-CMD ["node", "dist/api/server.js"]
+# Run pending DB migrations on every boot, THEN start (idempotent: schema_migrations
+# skips applied files). Fail-fast so the app never starts on an unmigrated schema.
+# (The service's dockerCommand is empty, so this CMD is what actually runs.)
+CMD ["sh", "-c", "node dist/db/migrate.js && node dist/api/server.js"]
