@@ -1,12 +1,21 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Balance, Card, Chip, EmptyState, Logo, Row, Screen, Skeleton, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, isCustomerMe, type Currency } from '@ticash/api-client';
-import { useI18n } from '@ticash/i18n';
-import { useMe, FEATURE_USDT, FEATURE_AIRTIME } from '@ticash/core';
+import { Balance, Card, Chip, EmptyState, ListItem, Logo, Row, Screen, Skeleton, Text, useTheme, useToast } from '@ticash/ui';
+import { formatMoneyParts, isCustomerMe, type Currency, type TxRow } from '@ticash/api-client';
+import { useI18n, type Translate } from '@ticash/i18n';
+import { useMe, useTransactions, FEATURE_USDT, FEATURE_AIRTIME } from '@ticash/core';
 import { currencyForCountry } from './auth/countries';
+
+const TX_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  transfer: 'arrow-up', fund_wallet: 'arrow-down', cash_in: 'arrow-down', cash_out: 'arrow-up',
+  airtime: 'phone-portrait-outline', payout: 'paper-plane-outline', reversal: 'refresh',
+};
+function txLabel(type: string, tr: Translate): string {
+  const k: Record<string, string> = { transfer: 'activity.send', fund_wallet: 'activity.deposit', cash_in: 'activity.cashIn', cash_out: 'activity.cashOut', airtime: 'activity.topup', payout: 'activity.payout', reversal: 'activity.reversal' };
+  return k[type] ? tr(k[type] as never) : type;
+}
 
 type ActionKey = 'send' | 'deposit' | 'receive' | 'topup' | 'usdt';
 const ALL_ACTIONS: { key: ActionKey; icon: keyof typeof Ionicons.glyphMap; route?: string }[] = [
@@ -27,7 +36,8 @@ export function HomeScreen() {
   const { t: tr } = useI18n();
   const router = useRouter();
   const toast = useToast();
-  const { data, isLoading } = useMe();
+  const { data, isLoading, refetch: refetchMe, isFetching } = useMe();
+  const txq = useTransactions(50);
   const me = data && isCustomerMe(data) ? data : null;
   const wallets = me?.wallets ?? [];
   // Home balance shows the user's country currency (BR→BRL, MX→MXN, …).
@@ -35,6 +45,8 @@ export function HomeScreen() {
   const hero = wallets.find((w) => w.currency === homeCcy) ?? wallets[0] ?? { currency: homeCcy, balanceMinor: '0' };
   const parts = formatMoneyParts(hero.balanceMinor, hero.currency);
   const others = wallets.filter((w) => w !== hero);
+  const recent = (txq.data ?? []).slice(0, 4);
+  const refreshAll = () => { void refetchMe(); void txq.refetch(); };
 
   return (
     <Screen scroll>
@@ -43,7 +55,12 @@ export function HomeScreen() {
           <Text variant="label" color="textMuted">{tr('home.greeting')}</Text>
           <Logo size={24} />
         </View>
-        {me?.kyc ? <Chip label={`${tr('profile.kyc')} · ${tr('profile.level')} ${me.kyc.level}`} tone={me.kyc.level >= 2 ? 'success' : 'warning'} /> : null}
+        <Row gap={2} style={{ alignItems: 'center' }}>
+          {me?.kyc ? <Chip label={`${tr('profile.kyc')} · ${tr('profile.level')} ${me.kyc.level}`} tone={me.kyc.level >= 2 ? 'success' : 'warning'} /> : null}
+          <Pressable onPress={refreshAll} hitSlop={10} style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.surface, borderWidth: 1, borderColor: t.colors.border, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="refresh" size={18} color={isFetching || txq.isFetching ? t.colors.primary : t.colors.textMuted} />
+          </Pressable>
+        </Row>
       </Row>
 
       {/* Hero balance card (navy chrome regardless of theme) */}
@@ -81,14 +98,34 @@ export function HomeScreen() {
       {/* Recent activity */}
       <Row style={{ justifyContent: 'space-between', marginTop: t.spacing(7), marginBottom: t.spacing(2) }}>
         <Text variant="subheading">{tr('home.recent')}</Text>
-        <Text variant="label" color="primary">{tr('home.seeAll')}</Text>
+        <Pressable onPress={() => router.push('/(app)/activity')}><Text variant="label" color="primary">{tr('home.seeAll')}</Text></Pressable>
       </Row>
       <Card padded={false} style={{ paddingHorizontal: t.spacing(4) }}>
-        <EmptyState
-          title={tr('home.empty')}
-          icon={<Ionicons name="receipt-outline" size={28} color={t.colors.primary} />}
-        />
+        {recent.length > 0 ? (
+          recent.map((row, i) => <HomeTxItem key={row.transactionUid + ':' + i} row={row} last={i === recent.length - 1} />)
+        ) : (
+          <EmptyState title={tr('home.empty')} icon={<Ionicons name="receipt-outline" size={28} color={t.colors.primary} />} />
+        )}
       </Card>
     </Screen>
+  );
+}
+
+function HomeTxItem({ row, last }: { row: TxRow; last: boolean }) {
+  const t = useTheme();
+  const { t: tr } = useI18n();
+  const p = formatMoneyParts(row.amountMinor, row.currency);
+  const credit = !p.negative;
+  const isSend = row.type === 'transfer';
+  const title = isSend && row.recipientName ? row.recipientName : txLabel(row.type, tr);
+  return (
+    <ListItem
+      title={title}
+      subtitle={row.createdAt.slice(0, 10)}
+      left={<View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><Ionicons name={TX_ICON[row.type] ?? 'ellipse-outline'} size={18} color={t.colors.primary} /></View>}
+      value={`${credit ? '+' : '-'}${p.symbol} ${p.integer},${p.fraction}`}
+      valueTone={credit ? 'success' : 'danger'}
+      divider={!last}
+    />
   );
 }

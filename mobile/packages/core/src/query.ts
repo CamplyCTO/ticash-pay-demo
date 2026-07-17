@@ -5,7 +5,10 @@ import { useAuthStore } from './auth-store';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 15_000, refetchOnWindowFocus: false },
+    // Keep data fresh without a re-login: refetch when a screen is navigated to
+    // (refetchOnMount) and when the app returns to the foreground (window focus,
+    // wired to React Native AppState in the app root via focusManager).
+    queries: { retry: 1, staleTime: 3_000, refetchOnMount: 'always', refetchOnWindowFocus: true, refetchOnReconnect: true },
   },
 });
 

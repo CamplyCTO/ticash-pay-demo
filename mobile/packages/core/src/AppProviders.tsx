@@ -1,5 +1,6 @@
 import React, { useEffect, type ReactNode } from 'react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { AppState, type AppStateStatus } from 'react-native';
+import { QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { I18nProvider } from '@ticash/i18n';
 import { ThemeProvider, ToastProvider } from '@ticash/ui';
@@ -13,6 +14,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  // Wire React Native AppState into React Query's focus manager so queries with
+  // refetchOnWindowFocus refresh when the app returns to the foreground (no re-login).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s: AppStateStatus) => focusManager.setFocused(s === 'active'));
+    return () => sub.remove();
+  }, []);
 
   return (
     <SafeAreaProvider>

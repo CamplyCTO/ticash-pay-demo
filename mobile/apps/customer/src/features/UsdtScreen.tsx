@@ -121,6 +121,7 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
   const [amount, setAmount] = useState('');
   const [order, setOrder] = useState<P2POrder | null>(null);
   const [proof, setProof] = useState('');
+  const [methodType, setMethodType] = useState<string>(offer.methods[0]?.type ?? '');
   const open = useOpenP2POrder();
   const pay = useP2PPay();
 
@@ -142,10 +143,15 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
           <Line label="Você paga" value={`${money(order.fiatMinor, order.fiatCurrency)} ${order.fiatCurrency}`} />
           <Divider spacing={1} />
           <Line label="Método" value={order.method.label} />
-          <Line label="Conta" value={order.method.account} />
+          <View style={{ marginTop: t.spacing(2) }}>
+            <Text variant="caption" color="textMuted" style={{ marginBottom: t.spacing(1) }}>Número / conta para pagar</Text>
+            <View style={{ borderWidth: 1, borderColor: t.colors.primary, borderRadius: t.radius.md, padding: t.spacing(3), backgroundColor: t.colors.primarySoft }}>
+              <Text selectable variant="heading" style={{ fontSize: 20 }}>{order.method.account}</Text>
+            </View>
+          </View>
         </Card>
         <Text variant="caption" color="textMuted" style={{ marginVertical: t.spacing(3) }}>
-          Faça o pagamento pelo método acima e informe abaixo o comprovante (link/ID). O vendedor confere e libera o USDT.
+          {`Envie ${money(order.fiatMinor, order.fiatCurrency)} ${order.fiatCurrency} para a conta ${order.method.label} acima e informe abaixo o comprovante (link/ID). O vendedor confere e libera o USDT.`}
         </Text>
         <Input label="Comprovante (link ou ID)" value={proof} onChangeText={setProof} placeholder="https://... ou nº da transação" />
       </Screen>
@@ -153,8 +159,8 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
   }
 
   return (
-    <Screen scroll footer={<Button title="Abrir ordem" disabled={amountNum <= 0 || open.isPending} loading={open.isPending} onPress={() => {
-      open.mutate({ offerId: offer.id, amount: amount.trim() }, {
+    <Screen scroll footer={<Button title="Abrir ordem" disabled={amountNum <= 0 || !methodType || open.isPending} loading={open.isPending} onPress={() => {
+      open.mutate({ offerId: offer.id, amount: amount.trim(), methodType }, {
         onSuccess: (o) => setOrder(o),
         onError: (e) => toast.error(messageForError(e, tr)),
       });
@@ -166,8 +172,19 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
         <Line label="Disponível" value={`${money(offer.remainingMinor, 'USDT')} USDT`} />
         {limitsLabel(offer) ? <Line label="Limite" value={limitsLabel(offer) as string} /> : null}
         <Line label="Prazo p/ pagar" value={`${offer.payWindowMin} min`} />
-        <Line label="Pagamento" value={offer.methods.map((m) => m.label).join(' · ')} />
       </Card>
+      <Text variant="label" color="textMuted" style={{ marginBottom: t.spacing(2) }}>Como você vai pagar</Text>
+      <Row gap={2} style={{ flexWrap: 'wrap', marginBottom: t.spacing(4) }}>
+        {offer.methods.map((m) => {
+          const activeM = m.type === methodType;
+          return (
+            <Pressable key={m.type} onPress={() => setMethodType(m.type)} style={{ paddingHorizontal: t.spacing(3.5), paddingVertical: t.spacing(2.5), borderRadius: t.radius.pill, backgroundColor: activeM ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: activeM ? t.colors.primary : t.colors.border }}>
+              <Text variant="label" weight="semibold" style={{ color: activeM ? t.colors.onPrimary : t.colors.text }}>{m.label}</Text>
+            </Pressable>
+          );
+        })}
+      </Row>
+      <Text variant="caption" color="textMuted" style={{ marginBottom: t.spacing(4) }}>O número/conta do vendedor aparece na próxima tela, depois de abrir a ordem.</Text>
       <Input label="Quanto de USDT" value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} keyboardType="decimal-pad" placeholder="0.00" />
       <Card style={{ marginTop: t.spacing(4) }}>
         <Line label="Você paga (aprox.)" value={`${estFiat} ${offer.fiatCurrency}`} strong />
