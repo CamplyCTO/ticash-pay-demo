@@ -4,6 +4,7 @@ import {
   type AgentCustomer,
   type AgentOpInput,
   type AirtimeProduct,
+  type CashoutRequest,
   type ApiErrorCode,
   type AuthTokens,
   type CreateOfferInput,
@@ -109,8 +110,22 @@ export class TicashApi {
   agentCashIn(input: AgentOpInput): Promise<{ transactionUid?: string; [k: string]: unknown }> {
     return this.request('POST', '/app/agent/cash-in', { auth: true, body: input });
   }
-  agentCashOut(input: AgentOpInput): Promise<{ transactionUid?: string; [k: string]: unknown }> {
+  /** Cash-out is now an APPROVAL request — returns a pending CashoutRequest. */
+  agentCashOut(input: AgentOpInput): Promise<CashoutRequest> {
     return this.request('POST', '/app/agent/cash-out', { auth: true, body: input });
+  }
+  agentCashoutMine(): Promise<CashoutRequest[]> {
+    return this.request('GET', '/app/cashout/mine', { auth: true });
+  }
+  // Customer: pending cash-out requests + approve (runs the debit) / reject.
+  cashoutPending(): Promise<CashoutRequest[]> {
+    return this.request('GET', '/app/cashout/pending', { auth: true });
+  }
+  cashoutApprove(id: string): Promise<CashoutRequest> {
+    return this.request('POST', `/app/cashout/${id}/approve`, { auth: true, body: {} });
+  }
+  cashoutReject(id: string): Promise<CashoutRequest> {
+    return this.request('POST', `/app/cashout/${id}/reject`, { auth: true, body: {} });
   }
 
   // P2P USDT marketplace: browse/list offers, order, pay, release, dispute.

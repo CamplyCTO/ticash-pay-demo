@@ -190,6 +190,12 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       if (b.action === 'release' && deps.push) void deps.push.service.notifyMoneyIn(order.buyerId, order.asset, order.netToBuyerMinor).catch(() => {});
       return order;
     });
+    // USDT/P2P commission — admin-editable (persisted). Applies to NEW orders.
+    app.get('/p2p/commission', async () => ({ commissionBps: await p2p.getCommissionBps() }));
+    app.post('/p2p/commission', async (req) => {
+      const b = z.object({ bps: z.number().int().min(0).max(2000) }).parse(req.body);
+      return { commissionBps: await p2p.setCommissionBps(b.bps) };
+    });
   }
 
   // ---- USDT deposit settlement (NOWPayments IPN) --------------------------

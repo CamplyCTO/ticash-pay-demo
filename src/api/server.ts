@@ -16,6 +16,8 @@ import {
   createAuthStore,
   createPushTokenStore,
   createP2PStore,
+  createSettingsStore,
+  createCashoutStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
@@ -46,6 +48,7 @@ import { TwilioVerifier, Verifier, VerifyChannel } from '../auth/verifier';
 import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
+import { CashoutService } from '../cashout/cashout-service';
 import { NowPaymentsAdapter } from '../deposits/nowpayments-adapter';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
@@ -78,6 +81,8 @@ export interface ServerDeps {
   push?: { service: PushService };
   /** P2P USDT escrow marketplace (WS-4). Always wired by defaultDeps. */
   p2p?: { service: P2PService };
+  /** Cash-out approval: agent requests → customer approves before any debit. */
+  cashout?: { service: CashoutService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -144,7 +149,11 @@ export function defaultDeps(): ServerDeps {
   }
   // P2P USDT escrow marketplace — always available (the NOWPayments on/off-ramp
   // that funds/withdraws USDT is wired separately once the client provides keys).
-  deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p) };
+  // Settings store powers the admin-editable P2P commission (persisted).
+  const settingsStore = createSettingsStore();
+  deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p, settingsStore) };
+  // Cash-out approval: an agent's cash-out becomes a request the customer approves.
+  deps.cashout = { service: new CashoutService(ledger, createCashoutStore(), config.cashout) };
   // USDT on-ramp (NOWPayments) — enabled once the API key is present.
   if (config.nowpayments.enabled) {
     deps.deposits = { gateway: new NowPaymentsAdapter(config.nowpayments), intents: createPaymentIntentStore(), events: createProviderEventStore(), callbackUrl: config.nowpayments.callbackUrl };

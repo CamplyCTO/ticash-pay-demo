@@ -117,6 +117,11 @@ export const config = {
      *  the order can be escalated to the admin (central). Minutes. */
     confirmWindowMinutes: Number(process.env.P2P_CONFIRM_WINDOW_MIN ?? 30),
   },
+  /** Cash-out approval: how long a pending cash-out request waits for the customer
+   *  to approve before it auto-expires (no debit). Minutes. */
+  cashout: {
+    expiryMinutes: Number(process.env.CASHOUT_EXPIRY_MIN ?? 30),
+  },
   /** Push notifications (Phase 3 WS-5). On by default; uses Expo's push API. */
   push: {
     enabled: (process.env.PUSH ?? 'on') !== 'off',

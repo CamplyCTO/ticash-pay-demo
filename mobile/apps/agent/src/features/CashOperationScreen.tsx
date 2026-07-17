@@ -55,15 +55,16 @@ export function CashOperationScreen() {
 
   if (opM.isSuccess) {
     const shown = formatMoneyParts(String(Math.round(Number(amount) * 100)), CCY);
+    // Cash-out is now an approval request — the customer must confirm before any debit.
     return (
       <Screen footer={<Button title={tr('common.continue')} onPress={reset} />}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: t.spacing(4) }}>
           <View style={{ width: 88, height: 88, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="checkmark" size={48} color={t.colors.primary} />
+            <Ionicons name={isOut ? 'hourglass-outline' : 'checkmark'} size={48} color={t.colors.primary} />
           </View>
-          <Text variant="title" center>{tr('agent.done')}</Text>
+          <Text variant="title" center>{isOut ? 'Aguardando aprovação' : tr('agent.done')}</Text>
           <Text variant="heading" color="primary">{`${shown.symbol} ${shown.integer},${shown.fraction}`}</Text>
-          <Text variant="body" color="textMuted">{title} · {customer?.phone}</Text>
+          <Text variant="body" color="textMuted" center>{isOut ? `O cliente ${customer?.phone} precisa aprovar no app antes do débito.` : `${title} · ${customer?.phone}`}</Text>
         </View>
       </Screen>
     );

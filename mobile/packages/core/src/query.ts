@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentOpInput, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
+import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -93,6 +93,27 @@ export function useUsdtDeposit() {
     mutationFn: (amount: string) => api.usdtDeposit(amount),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['me'] }),
   });
+}
+
+// ---- Cash-out approval (customer approves an agent-initiated withdrawal) ----
+/** Pending cash-out requests awaiting the customer's approval. Polls so a new
+ *  request appears even without a push. */
+export function useCashoutPending() {
+  const enabled = useAuthed();
+  return useQuery<CashoutRequest[]>({ queryKey: ['cashout-pending'], queryFn: () => api.cashoutPending(), enabled, refetchInterval: 15_000 });
+}
+const invalidateCashout = (qc: ReturnType<typeof useQueryClient>) => {
+  void qc.invalidateQueries({ queryKey: ['cashout-pending'] });
+  void qc.invalidateQueries({ queryKey: ['me'] });
+  void qc.invalidateQueries({ queryKey: ['transactions'] });
+};
+export function useApproveCashout() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.cashoutApprove(id), onSuccess: () => invalidateCashout(qc) });
+}
+export function useRejectCashout() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.cashoutReject(id), onSuccess: () => invalidateCashout(qc) });
 }
 
 // ---- agent (WS-3) ----

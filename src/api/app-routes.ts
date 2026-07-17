@@ -273,7 +273,59 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     return posted;
   };
   app.post('/app/agent/cash-in', (req, reply) => doAgentOp(req, reply, 'cash-in'));
-  app.post('/app/agent/cash-out', (req, reply) => doAgentOp(req, reply, 'cash-out'));
+
+  // Cash-out is an APPROVAL request (security): the agent creates it, but NO money
+  // moves until the customer approves it in-app. Knowing a number is not enough.
+  if (deps.cashout) {
+    const cashout = deps.cashout.service;
+    app.post('/app/agent/cash-out', async (req, reply) => {
+      const me = await requireAgent(req);
+      const b = z.object({ customerId: z.string().min(1), currency: currencySchema, amount: amountSchema }).parse(req.body);
+      const customer = await deps.registry.getCustomer(b.customerId);
+      if (!customer) throw new RegistryError(`customer ${b.customerId} not found`, 'NOT_FOUND');
+      if (customer.status === 'blocked') throw new RegistryError('customer is blocked', 'FORBIDDEN');
+      const agent = await deps.registry.getAgent(me.externalId);
+      const amountMinor = money(b.amount, b.currency);
+      const commissionMinor = applyBps(amountMinor, agent?.commissionBps ?? 0);
+      reply.status(201);
+      const request = await cashout.request({ agentId: me.externalId, customerId: b.customerId, currency: b.currency, amountMinor, commissionMinor });
+      req.log.info({ audit: 'cashout.request', agentId: me.externalId, customerId: b.customerId, currency: b.currency, requestId: request.id }, 'cash-out requested');
+      // Ask the customer to approve (best-effort push — must never block the request).
+      if (deps.push) void deps.push.service.notifyCashoutRequest(b.customerId, b.currency, amountMinor).catch(() => { /* best-effort */ });
+      return request;
+    });
+    // Agent: their own cash-out requests + statuses; may cancel a pending one.
+    app.get('/app/cashout/mine', async (req) => {
+      const me = await requireAgent(req);
+      return cashout.listByAgent(me.externalId, 50);
+    });
+    app.post('/app/cashout/:id/cancel', async (req) => {
+      const me = await requireAgent(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return cashout.cancel({ requestId: p.id, agentId: me.externalId });
+    });
+    // Customer: pending requests + approve (runs the debit) / reject (no debit).
+    const requireCustomerRole = (req: FastifyRequest): AppUserContext => {
+      const me = appUserOf(req);
+      if (me.role !== 'customer') throw new RegistryError('this action is for customers', 'FORBIDDEN');
+      return me;
+    };
+    app.get('/app/cashout/pending', async (req) => cashout.listPending(requireCustomerRole(req).externalId));
+    app.post('/app/cashout/:id/approve', async (req) => {
+      const me = requireCustomerRole(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const r = await cashout.approve({ requestId: p.id, customerId: me.externalId });
+      req.log.info({ audit: 'cashout.approve', customerId: me.externalId, requestId: p.id }, 'cash-out approved');
+      return r;
+    });
+    app.post('/app/cashout/:id/reject', async (req) => {
+      const me = requireCustomerRole(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return cashout.reject({ requestId: p.id, customerId: me.externalId });
+    });
+  } else {
+    app.post('/app/agent/cash-out', (req, reply) => doAgentOp(req, reply, 'cash-out'));
+  }
 
   // ---- Push notifications: register / opt-out a device (scoped to caller) --
   if (deps.push) {

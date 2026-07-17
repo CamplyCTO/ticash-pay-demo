@@ -3,8 +3,11 @@ import { Currency } from '../money/currency';
 import { convert } from '../money/money';
 import { applyBps } from '../fx/rate-service';
 import { LedgerService } from '../ledger/service';
+import { SettingsStore } from '../settings/settings-store';
 import { P2PError, P2PStore } from './p2p-store';
 import { Offer, Order, PaymentMethod } from './types';
+
+const COMMISSION_KEY = 'p2p_commission_bps';
 
 export interface P2PConfig {
   asset: Currency; // 'USDT'
@@ -31,7 +34,25 @@ export class P2PService {
     private readonly ledger: LedgerService,
     private readonly store: P2PStore,
     private readonly cfg: P2PConfig,
+    private readonly settings?: SettingsStore,
   ) {}
+
+  /** The current P2P commission (bps). Admin-editable via the settings store;
+   *  falls back to the configured default. */
+  async getCommissionBps(): Promise<number> {
+    if (!this.settings) return this.cfg.commissionBps;
+    const v = await this.settings.get(COMMISSION_KEY);
+    const n = v === null ? NaN : Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : this.cfg.commissionBps;
+  }
+
+  /** Admin sets the P2P commission (persisted). Applies to NEW orders. */
+  async setCommissionBps(bps: number): Promise<number> {
+    if (!Number.isInteger(bps) || bps < 0 || bps > 2000) throw new P2PError('commission must be 0..2000 bps (0..20%)', 'VALIDATION');
+    if (this.settings) await this.settings.set(COMMISSION_KEY, String(bps));
+    else this.cfg.commissionBps = bps;
+    return bps;
+  }
 
   // ---- seller: list / close ------------------------------------------------
 
@@ -123,7 +144,7 @@ export class P2PService {
     const method = args.methodType ? offer.methods.find((m) => m.type === args.methodType) : offer.methods[0];
     if (!method) throw new P2PError('payment method not offered', 'VALIDATION');
 
-    const commissionMinor = applyBps(args.assetMinor, this.cfg.commissionBps);
+    const commissionMinor = applyBps(args.assetMinor, await this.getCommissionBps());
     const netToBuyerMinor = args.assetMinor - commissionMinor;
     const fiatMinor = convert(args.assetMinor, offer.asset, offer.fiatCurrency, offer.pricePerUnit);
 

@@ -153,6 +153,21 @@ export interface AgentOpInput {
   idempotencyKey?: string;
 }
 
+// ---- Cash-out approval (agent requests → customer approves before debit) ----
+export type CashoutStatus = 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired';
+export interface CashoutRequest {
+  id: string;
+  agentId: string;
+  customerId: string;
+  currency: Currency;
+  amountMinor: string;
+  commissionMinor: string;
+  status: CashoutStatus;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---- WS-4 P2P USDT marketplace (BigInt fields arrive as strings) ----
 export interface P2PPaymentMethod {
   type: string;

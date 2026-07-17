@@ -44,4 +44,14 @@ export class PushService {
       data: { type: 'money_in', currency, amountMinor: amountMinor.toString(), screen: '/(app)/activity' },
     });
   }
+
+  /** Ask a customer to approve a pending cash-out (an agent-initiated withdrawal). */
+  notifyCashoutRequest(externalId: string, currency: Currency, amountMinor: bigint): Promise<number> {
+    const amount = `${CURRENCIES[currency].symbol} ${fromMinor(amountMinor, currency)}`;
+    return this.dispatchToExternalId(externalId, {
+      title: 'Aprovar retirada?',
+      body: `Um agente pediu para retirar ${amount} da sua conta. Toque para aprovar ou recusar.`,
+      data: { type: 'cashout_request', currency, amountMinor: amountMinor.toString(), screen: '/(app)/cashout' },
+    });
+  }
 }

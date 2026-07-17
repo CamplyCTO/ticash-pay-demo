@@ -30,6 +30,8 @@ import { InMemoryAuthStore } from '../auth/in-memory-auth-store';
 import { PgAuthStore } from '../auth/pg-auth-store';
 import { InMemoryPushTokenStore, PgPushTokenStore, PushTokenStore } from '../push/push-token-store';
 import { InMemoryP2PStore, P2PStore, PgP2PStore } from '../p2p/p2p-store';
+import { InMemorySettingsStore, PgSettingsStore, SettingsStore } from '../settings/settings-store';
+import { CashoutStore, InMemoryCashoutStore, PgCashoutStore } from '../cashout/cashout-store';
 
 export function createStore(): LedgerStore {
   return config.useInMemory ? new InMemoryLedgerStore() : new PgLedgerStore(getPool());
@@ -80,4 +82,12 @@ export function createPushTokenStore(): PushTokenStore {
 
 export function createP2PStore(): P2PStore {
   return config.useInMemory ? new InMemoryP2PStore() : new PgP2PStore(getPool());
+}
+
+export function createSettingsStore(): SettingsStore {
+  return config.useInMemory ? new InMemorySettingsStore() : new PgSettingsStore(getPool());
+}
+
+export function createCashoutStore(): CashoutStore {
+  return config.useInMemory ? new InMemoryCashoutStore() : new PgCashoutStore(getPool());
 }

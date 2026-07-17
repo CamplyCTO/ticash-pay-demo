@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Balance, Card, Chip, EmptyState, ListItem, Logo, Row, Screen, Skeleton, Text, useTheme, useToast } from '@ticash/ui';
 import { formatMoneyParts, isCustomerMe, type Currency, type TxRow } from '@ticash/api-client';
 import { useI18n, type Translate } from '@ticash/i18n';
-import { useMe, useTransactions, FEATURE_USDT, FEATURE_AIRTIME } from '@ticash/core';
+import { useMe, useTransactions, useCashoutPending, FEATURE_USDT, FEATURE_AIRTIME } from '@ticash/core';
 import { currencyForCountry } from './auth/countries';
 
 const TX_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
@@ -46,6 +46,7 @@ export function HomeScreen() {
   const parts = formatMoneyParts(hero.balanceMinor, hero.currency);
   const others = wallets.filter((w) => w !== hero);
   const recent = (txq.data ?? []).slice(0, 4);
+  const pendingCashout = useCashoutPending().data ?? [];
   const refreshAll = () => { void refetchMe(); void txq.refetch(); };
 
   return (
@@ -82,6 +83,20 @@ export function HomeScreen() {
           </Row>
         ) : null}
       </View>
+
+      {/* Pending cash-out approvals — a withdrawal needs the customer's OK */}
+      {pendingCashout.length > 0 ? (
+        <Pressable onPress={() => router.push('/(app)/cashout')}>
+          <Card style={{ marginTop: t.spacing(4), backgroundColor: t.colors.primarySoft, flexDirection: 'row', alignItems: 'center', gap: t.spacing(3) }}>
+            <Ionicons name="shield-half-outline" size={22} color={t.colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text variant="body" weight="bold">Retirada aguardando aprovação</Text>
+              <Text variant="caption" color="textMuted">{`${pendingCashout.length} pedido(s) — toque para aprovar ou recusar`}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />
+          </Card>
+        </Pressable>
+      ) : null}
 
       {/* Quick actions */}
       <Row gap={3} style={{ marginTop: t.spacing(5) }}>
