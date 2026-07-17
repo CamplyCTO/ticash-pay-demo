@@ -45,6 +45,26 @@ export class PushService {
     });
   }
 
+  /** Tell a seller a buyer opened an order against their USDT offer. */
+  notifyP2PNewOrder(externalId: string, assetMinor: bigint): Promise<number> {
+    const amount = `${CURRENCIES.USDT.symbol} ${fromMinor(assetMinor, 'USDT')}`;
+    return this.dispatchToExternalId(externalId, {
+      title: 'Novo pedido de USDT',
+      body: `Alguém quer comprar ${amount} de USDT de você. Toque para ver.`,
+      data: { type: 'p2p_new_order', screen: '/(app)/usdt' },
+    });
+  }
+
+  /** Tell a seller a buyer marked payment sent — confirm receipt and release. */
+  notifyP2PPaymentSubmitted(externalId: string, currency: Currency, fiatMinor: bigint): Promise<number> {
+    const amount = `${CURRENCIES[currency].symbol} ${fromMinor(fiatMinor, currency)}`;
+    return this.dispatchToExternalId(externalId, {
+      title: 'Pagamento informado',
+      body: `Um comprador informou o pagamento de ${amount}. Confira e libere o USDT.`,
+      data: { type: 'p2p_payment', screen: '/(app)/usdt' },
+    });
+  }
+
   /** Ask a customer to approve a pending cash-out (an agent-initiated withdrawal). */
   notifyCashoutRequest(externalId: string, currency: Currency, amountMinor: bigint): Promise<number> {
     const amount = `${CURRENCIES[currency].symbol} ${fromMinor(amountMinor, currency)}`;

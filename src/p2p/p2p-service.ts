@@ -81,6 +81,10 @@ export class P2PService {
     if (minFiatMinor !== null && minFiatMinor < 0n) throw new P2PError('minimum cannot be negative', 'VALIDATION');
     if (maxFiatMinor !== null && maxFiatMinor <= 0n) throw new P2PError('maximum must be positive', 'VALIDATION');
     if (minFiatMinor !== null && maxFiatMinor !== null && minFiatMinor > maxFiatMinor) throw new P2PError('minimum cannot exceed maximum', 'VALIDATION');
+    // The max a buyer can pay can never exceed the offer's total value — a seller can
+    // only sell the USDT they actually hold (else they couldn't deliver). Cap it.
+    const offerValueFiat = convert(args.totalMinor, this.cfg.asset, args.fiatCurrency, args.pricePerUnit);
+    if (maxFiatMinor !== null && maxFiatMinor > offerValueFiat) throw new P2PError('maximum exceeds the offer value — you can only sell the USDT you hold', 'VALIDATION');
     const payWindowMin = args.payWindowMin ?? DEFAULT_PAY_WINDOW_MIN;
     if (!Number.isInteger(payWindowMin) || payWindowMin < 1 || payWindowMin > 1440) throw new P2PError('payment window must be 1..1440 minutes', 'VALIDATION');
 

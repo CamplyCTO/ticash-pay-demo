@@ -12,6 +12,7 @@ import {
   useCloseP2POffer,
   useP2POrders,
   useP2PPay,
+  useReleaseP2POrder,
   useDisputeP2POrder,
   useCancelP2POrder,
   useUsdtDeposit,
@@ -193,18 +194,44 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
   );
 }
 
+const SELLER_STATUS: Record<P2POrder['status'], string> = {
+  created: 'Aguardando o comprador pagar',
+  payment_submitted: 'Pago — confira e libere o USDT',
+  released: 'Concluída — USDT liberado',
+  cancelled: 'Cancelada',
+  disputed: 'Em disputa (central)',
+};
+
 function OrdersTab() {
+  const t = useTheme();
+  const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
+  return (
+    <View style={{ gap: t.spacing(3) }}>
+      <Row gap={2}>
+        {(['buyer', 'seller'] as const).map((k) => {
+          const active = k === role;
+          return (
+            <Pressable key={k} onPress={() => setRole(k)} style={{ flex: 1, alignItems: 'center', paddingVertical: t.spacing(2), borderRadius: t.radius.pill, backgroundColor: active ? t.colors.primary : t.colors.surface, borderWidth: 1, borderColor: active ? t.colors.primary : t.colors.border }}>
+              <Text variant="label" weight="semibold" style={{ color: active ? t.colors.onPrimary : t.colors.text }}>{k === 'buyer' ? 'Compras' : 'Vendas'}</Text>
+            </Pressable>
+          );
+        })}
+      </Row>
+      {role === 'buyer' ? <BuyerOrders /> : <SellerOrders />}
+    </View>
+  );
+}
+
+function BuyerOrders() {
   const t = useTheme();
   const toast = useToast();
   const { t: tr } = useI18n();
   const orders = useP2POrders('buyer');
   const cancel = useCancelP2POrder();
   const dispute = useDisputeP2POrder();
-
   if (orders.isLoading) return <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>;
   const rows = orders.data ?? [];
-  if (!rows.length) return <EmptyState title="Você ainda não tem ordens" icon={<Ionicons name="receipt-outline" size={26} color={t.colors.primary} />} />;
-
+  if (!rows.length) return <EmptyState title="Você ainda não tem compras" icon={<Ionicons name="receipt-outline" size={26} color={t.colors.primary} />} />;
   return (
     <View style={{ gap: t.spacing(3) }}>
       {rows.map((o) => (
@@ -221,6 +248,48 @@ function OrdersTab() {
               <Button variant="ghost" title="Abrir disputa" onPress={() => dispute.mutate({ id: o.id, reason: 'Paguei mas não recebi o USDT' }, { onSuccess: () => toast.success('Disputa aberta — a central vai analisar'), onError: (e) => toast.error(messageForError(e, tr)) })} />
             )}
           </Row>
+        </Card>
+      ))}
+    </View>
+  );
+}
+
+// Seller side: see orders against your offers, check the buyer's proof, and RELEASE
+// the USDT (the answer to "como o vendedor libera o USDT").
+function SellerOrders() {
+  const t = useTheme();
+  const toast = useToast();
+  const { t: tr } = useI18n();
+  const orders = useP2POrders('seller');
+  const release = useReleaseP2POrder();
+  const cancel = useCancelP2POrder();
+  if (orders.isLoading) return <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>;
+  const rows = orders.data ?? [];
+  if (!rows.length) return <EmptyState title="Nenhuma venda ainda" icon={<Ionicons name="cash-outline" size={26} color={t.colors.primary} />} />;
+  const busy = release.isPending || cancel.isPending;
+  return (
+    <View style={{ gap: t.spacing(3) }}>
+      {rows.map((o) => (
+        <Card key={o.id} style={{ gap: t.spacing(2) }}>
+          <View>
+            <Text variant="body" weight="bold">{`${money(o.assetMinor, 'USDT')} USDT`}</Text>
+            <Text variant="caption" color="textMuted">{`Recebe ${money(o.fiatMinor, o.fiatCurrency)} ${o.fiatCurrency} · ${o.method.label}`}</Text>
+            <Text variant="caption" color={o.status === 'payment_submitted' ? 'primary' : 'textMuted'}>{SELLER_STATUS[o.status]}</Text>
+          </View>
+          {o.status === 'payment_submitted' ? (
+            <>
+              {o.proofRef ? (
+                <View style={{ borderWidth: 1, borderColor: t.colors.divider, borderRadius: t.radius.md, padding: t.spacing(2.5) }}>
+                  <Text variant="caption" color="textMuted">Comprovante do comprador</Text>
+                  <Text selectable variant="caption">{o.proofRef}</Text>
+                </View>
+              ) : null}
+              <Row gap={3}>
+                <Button variant="secondary" title="Rejeitar" style={{ flex: 1 }} disabled={busy} onPress={() => cancel.mutate(o.id, { onSuccess: () => toast.success('Ordem rejeitada'), onError: (e) => toast.error(messageForError(e, tr)) })} />
+                <Button title="Liberar USDT" style={{ flex: 1 }} loading={release.isPending} disabled={busy} onPress={() => release.mutate(o.id, { onSuccess: () => toast.success('USDT liberado ao comprador'), onError: (e) => toast.error(messageForError(e, tr)) })} />
+              </Row>
+            </>
+          ) : null}
         </Card>
       ))}
     </View>

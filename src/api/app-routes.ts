@@ -396,7 +396,10 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       const me = await requireCustomer(req);
       const b = z.object({ offerId: z.string().min(1), amount: amountSchema, methodType: z.string().optional() }).parse(req.body);
       reply.status(201);
-      return p2p.openOrder({ offerId: b.offerId, buyerId: me.externalId, assetMinor: money(b.amount, 'USDT'), ...(b.methodType ? { methodType: b.methodType } : {}) });
+      const order = await p2p.openOrder({ offerId: b.offerId, buyerId: me.externalId, assetMinor: money(b.amount, 'USDT'), ...(b.methodType ? { methodType: b.methodType } : {}) });
+      // Let the seller know they have a pending order to fulfil (best-effort).
+      if (deps.push) void deps.push.service.notifyP2PNewOrder(order.merchantId, order.assetMinor).catch(() => { /* best-effort */ });
+      return order;
     });
     // The caller's orders — as buyer by default, as seller with ?role=seller.
     app.get('/app/p2p/orders', async (req) => {
@@ -417,7 +420,10 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       const me = await requireCustomer(req);
       const p = z.object({ id: z.string().min(1) }).parse(req.params);
       const b = z.object({ proofRef: z.string().min(1).max(2048) }).parse(req.body);
-      return p2p.submitPayment({ orderId: p.id, buyerId: me.externalId, proofRef: b.proofRef });
+      const order = await p2p.submitPayment({ orderId: p.id, buyerId: me.externalId, proofRef: b.proofRef });
+      // Nudge the seller to check the proof and release the USDT (best-effort).
+      if (deps.push) void deps.push.service.notifyP2PPaymentSubmitted(order.merchantId, order.fiatCurrency, order.fiatMinor).catch(() => { /* best-effort */ });
+      return order;
     });
     // Seller: confirm receipt → release escrowed USDT to the buyer (minus commission).
     app.post('/app/p2p/orders/:id/release', async (req) => {
