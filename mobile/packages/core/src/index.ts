@@ -27,6 +27,7 @@ export {
   useCloseP2POffer,
   useOpenP2POrder,
   useP2PPay,
+  useP2PProofImage,
   useReleaseP2POrder,
   useCancelP2POrder,
   useDisputeP2POrder,

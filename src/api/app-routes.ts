@@ -415,15 +415,28 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       if (!order || (order.buyerId !== me.externalId && order.merchantId !== me.externalId)) throw new RegistryError('order not found', 'NOT_FOUND');
       return order;
     });
-    // Buyer: report the off-platform payment sent (with a proof reference).
-    app.post('/app/p2p/orders/:id/pay', async (req) => {
+    // Buyer: report the off-platform payment sent — a text reference AND/OR a photo
+    // (screenshot). bodyLimit raised so a compressed image fits as base64.
+    app.post('/app/p2p/orders/:id/pay', { bodyLimit: 8 * 1024 * 1024 }, async (req) => {
       const me = await requireCustomer(req);
       const p = z.object({ id: z.string().min(1) }).parse(req.params);
-      const b = z.object({ proofRef: z.string().min(1).max(2048) }).parse(req.body);
-      const order = await p2p.submitPayment({ orderId: p.id, buyerId: me.externalId, proofRef: b.proofRef });
+      const b = z.object({ proofRef: z.string().max(2048).optional(), image: z.string().max(6_000_000).optional(), contentType: z.string().max(60).optional() }).parse(req.body);
+      if (!b.proofRef?.trim() && !b.image) throw new RegistryError('informe um comprovante (texto ou foto)', 'VALIDATION');
+      const order = await p2p.submitPayment({ orderId: p.id, buyerId: me.externalId, proofRef: b.proofRef?.trim() || 'Foto anexada' });
+      if (b.image) {
+        await p2p.attachProofImage({ orderId: p.id, buyerId: me.externalId, image: Buffer.from(b.image, 'base64'), contentType: b.contentType ?? 'image/jpeg' });
+      }
       // Nudge the seller to check the proof and release the USDT (best-effort).
       if (deps.push) void deps.push.service.notifyP2PPaymentSubmitted(order.merchantId, order.fiatCurrency, order.fiatMinor).catch(() => { /* best-effort */ });
       return order;
+    });
+    // Buyer or seller: fetch the order's proof image (base64) — visible only to them.
+    app.get('/app/p2p/orders/:id/proof-image', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const proof = await p2p.getProofImage({ orderId: p.id, requesterId: me.externalId });
+      if (!proof) return reply.status(404).send({ error: 'NotFound', code: 'NOT_FOUND', message: 'no proof image' });
+      return { image: proof.image.toString('base64'), contentType: proof.contentType };
     });
     // Seller: confirm receipt → release escrowed USDT to the buyer (minus commission).
     app.post('/app/p2p/orders/:id/release', async (req) => {

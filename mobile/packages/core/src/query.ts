@@ -178,7 +178,12 @@ export function useOpenP2POrder() {
 }
 export function useP2PPay() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (input: { id: string; proofRef: string }) => api.p2pPay(input.id, input.proofRef), onSuccess: () => invalidateP2P(qc) });
+  return useMutation({ mutationFn: (input: { id: string; proofRef?: string; image?: string; contentType?: string }) => api.p2pPay(input.id, { proofRef: input.proofRef, image: input.image, contentType: input.contentType }), onSuccess: () => invalidateP2P(qc) });
+}
+/** An order's payment-proof image (base64 data). Fetched on demand by the seller. */
+export function useP2PProofImage(orderId: string | null) {
+  const enabled = useAuthed() && !!orderId;
+  return useQuery<{ image: string; contentType: string }>({ queryKey: ['p2p-proof', orderId], queryFn: () => api.p2pProofImage(orderId as string), enabled, retry: false });
 }
 export function useReleaseP2POrder() {
   const qc = useQueryClient();

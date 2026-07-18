@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Image, Pressable, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
 import { formatMoneyParts, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod } from '@ticash/api-client';
@@ -12,6 +14,7 @@ import {
   useCloseP2POffer,
   useP2POrders,
   useP2PPay,
+  useP2PProofImage,
   useReleaseP2POrder,
   useDisputeP2POrder,
   useCancelP2POrder,
@@ -122,6 +125,7 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
   const [amount, setAmount] = useState('');
   const [order, setOrder] = useState<P2POrder | null>(null);
   const [proof, setProof] = useState('');
+  const [photo, setPhoto] = useState<{ base64: string; uri: string } | null>(null);
   const [methodType, setMethodType] = useState<string>(offer.methods[0]?.type ?? '');
   const open = useOpenP2POrder();
   const pay = useP2PPay();
@@ -129,11 +133,20 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
   const amountNum = Number(amount);
   const estFiat = amountNum > 0 ? (amountNum * Number(offer.pricePerUnit)).toFixed(2) : '0.00';
 
+  const pickPhoto = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7 });
+    if (res.canceled || !res.assets?.[0]) return;
+    // Resize + compress so the upload stays small (a screenshot is plenty at 1000px/60%).
+    const m = await ImageManipulator.manipulateAsync(res.assets[0].uri, [{ resize: { width: 1000 } }], { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true });
+    if (m.base64) setPhoto({ base64: m.base64, uri: m.uri });
+  };
+
   if (order) {
-    // Payment instructions + proof submission.
+    const canConfirm = (proof.trim().length >= 3 || !!photo) && !pay.isPending;
+    // Payment instructions + proof submission (text and/or photo).
     return (
-      <Screen scroll footer={<Button title="Confirmar pagamento" disabled={proof.trim().length < 3 || pay.isPending} loading={pay.isPending} onPress={() => {
-        pay.mutate({ id: order.id, proofRef: proof.trim() }, {
+      <Screen scroll footer={<Button title="Confirmar pagamento" disabled={!canConfirm} loading={pay.isPending} onPress={() => {
+        pay.mutate({ id: order.id, proofRef: proof.trim() || undefined, image: photo?.base64, contentType: photo ? 'image/jpeg' : undefined }, {
           onSuccess: () => { toast.success('Pagamento informado — aguarde a confirmação do vendedor'); onDone(); },
           onError: (e) => toast.error(messageForError(e, tr)),
         });
@@ -152,9 +165,18 @@ function BuyForm({ offer, onDone }: { offer: P2POffer; onDone: () => void }) {
           </View>
         </Card>
         <Text variant="caption" color="textMuted" style={{ marginVertical: t.spacing(3) }}>
-          {`Envie ${money(order.fiatMinor, order.fiatCurrency)} ${order.fiatCurrency} para a conta ${order.method.label} acima e informe abaixo o comprovante (link/ID). O vendedor confere e libera o USDT.`}
+          {`Envie ${money(order.fiatMinor, order.fiatCurrency)} ${order.fiatCurrency} para a conta ${order.method.label} acima. Anexe uma foto do comprovante (ou informe o link/ID). O vendedor confere e libera o USDT.`}
         </Text>
-        <Input label="Comprovante (link ou ID)" value={proof} onChangeText={setProof} placeholder="https://... ou nº da transação" />
+        {/* Photo of the payment (screenshot) — the primary proof for most users */}
+        {photo ? (
+          <View style={{ marginBottom: t.spacing(3) }}>
+            <Image source={{ uri: photo.uri }} style={{ width: '100%', height: 220, borderRadius: t.radius.md }} resizeMode="contain" />
+            <Button title="Trocar foto" variant="ghost" onPress={pickPhoto} style={{ marginTop: t.spacing(1) }} />
+          </View>
+        ) : (
+          <Button title="Anexar foto do comprovante" variant="secondary" onPress={pickPhoto} left={<Ionicons name="camera-outline" size={18} color={t.colors.text} />} style={{ marginBottom: t.spacing(3) }} />
+        )}
+        <Input label="Comprovante (link ou ID) — opcional" value={proof} onChangeText={setProof} placeholder="https://... ou nº da transação" />
       </Screen>
     );
   }
@@ -284,6 +306,7 @@ function SellerOrders() {
                   <Text selectable variant="caption">{o.proofRef}</Text>
                 </View>
               ) : null}
+              <ProofImage orderId={o.id} />
               <Row gap={3}>
                 <Button variant="secondary" title="Rejeitar" style={{ flex: 1 }} disabled={busy} onPress={() => cancel.mutate(o.id, { onSuccess: () => toast.success('Ordem rejeitada'), onError: (e) => toast.error(messageForError(e, tr)) })} />
                 <Button title="Liberar USDT" style={{ flex: 1 }} loading={release.isPending} disabled={busy} onPress={() => release.mutate(o.id, { onSuccess: () => toast.success('USDT liberado ao comprador'), onError: (e) => toast.error(messageForError(e, tr)) })} />
@@ -481,6 +504,19 @@ function DepositTab() {
           onError: (e) => toast.error(messageForError(e, tr)),
         });
       }} />
+    </View>
+  );
+}
+
+/** Loads + shows the buyer's payment-proof photo for a seller's order (if any). */
+function ProofImage({ orderId }: { orderId: string }) {
+  const t = useTheme();
+  const q = useP2PProofImage(orderId);
+  if (q.isError || !q.data?.image) return null;
+  return (
+    <View>
+      <Text variant="caption" color="textMuted" style={{ marginBottom: t.spacing(1) }}>Foto do comprovante</Text>
+      <Image source={{ uri: `data:${q.data.contentType};base64,${q.data.image}` }} style={{ width: '100%', height: 220, borderRadius: t.radius.md }} resizeMode="contain" />
     </View>
   );
 }

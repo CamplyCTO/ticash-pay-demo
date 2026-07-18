@@ -39,7 +39,13 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Ticash usa suas fotos para você anexar o comprovante de pagamento."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false

@@ -252,6 +252,19 @@ export class P2PService {
     return this.store.getOrder(id);
   }
 
+  /** Buyer attaches a payment-proof image (photo/screenshot) to their order. */
+  async attachProofImage(args: { orderId: string; buyerId: string; image: Buffer; contentType: string }): Promise<void> {
+    const order = await this.requireOrder(args.orderId);
+    if (order.buyerId !== args.buyerId) throw new P2PError('not your order', 'FORBIDDEN');
+    await this.store.saveProof(order.id, args.image, args.contentType);
+  }
+  /** Buyer or seller fetches the order's payment-proof image (visible only to them). */
+  async getProofImage(args: { orderId: string; requesterId: string }): Promise<{ image: Buffer; contentType: string } | null> {
+    const order = await this.requireOrder(args.orderId);
+    if (order.buyerId !== args.requesterId && order.merchantId !== args.requesterId) throw new P2PError('order not found', 'NOT_FOUND');
+    return this.store.getProof(order.id);
+  }
+
   // ---- internals -----------------------------------------------------------
 
   /**

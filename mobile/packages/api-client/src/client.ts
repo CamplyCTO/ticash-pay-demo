@@ -150,8 +150,12 @@ export class TicashApi {
   p2pOrder(id: string): Promise<P2POrder> {
     return this.request('GET', `/app/p2p/orders/${id}`, { auth: true });
   }
-  p2pPay(id: string, proofRef: string): Promise<P2POrder> {
-    return this.request('POST', `/app/p2p/orders/${id}/pay`, { auth: true, body: { proofRef } });
+  p2pPay(id: string, input: { proofRef?: string; image?: string; contentType?: string }): Promise<P2POrder> {
+    return this.request('POST', `/app/p2p/orders/${id}/pay`, { auth: true, body: input });
+  }
+  /** Fetch an order's payment-proof image (base64) — buyer or seller only. */
+  p2pProofImage(id: string): Promise<{ image: string; contentType: string }> {
+    return this.request('GET', `/app/p2p/orders/${id}/proof-image`, { auth: true });
   }
   p2pRelease(id: string): Promise<P2POrder> {
     return this.request('POST', `/app/p2p/orders/${id}/release`, { auth: true, body: {} });

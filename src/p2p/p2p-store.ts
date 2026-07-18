@@ -55,6 +55,10 @@ export interface P2PStore {
   cancelOrder(id: string): Promise<Order>;
   /** Are there orders still holding escrow against this offer? (blocks close) */
   hasActiveOrders(offerId: string): Promise<boolean>;
+  /** Store/replace the buyer's payment-proof image for an order. */
+  saveProof(orderUid: string, image: Buffer, contentType: string): Promise<void>;
+  /** Fetch an order's payment-proof image, if any. */
+  getProof(orderUid: string): Promise<{ image: Buffer; contentType: string } | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +67,7 @@ export interface P2PStore {
 export class InMemoryP2PStore implements P2PStore {
   private readonly offers = new Map<string, Offer>();
   private readonly orders = new Map<string, Order>();
+  private readonly proofs = new Map<string, { image: Buffer; contentType: string }>();
 
   async createOffer(o: NewOffer): Promise<Offer> {
     const offer: Offer = {
@@ -159,6 +164,13 @@ export class InMemoryP2PStore implements P2PStore {
   }
   async hasActiveOrders(offerId: string): Promise<boolean> {
     return [...this.orders.values()].some((o) => o.offerId === offerId && ACTIVE_ORDER.has(o.status));
+  }
+  async saveProof(orderUid: string, image: Buffer, contentType: string): Promise<void> {
+    this.proofs.set(orderUid, { image: Buffer.from(image), contentType });
+  }
+  async getProof(orderUid: string): Promise<{ image: Buffer; contentType: string } | null> {
+    const p = this.proofs.get(orderUid);
+    return p ? { image: Buffer.from(p.image), contentType: p.contentType } : null;
   }
 }
 
@@ -316,6 +328,17 @@ export class PgP2PStore implements P2PStore {
       [offerId],
     );
     return res.rows.length > 0;
+  }
+  async saveProof(orderUid: string, image: Buffer, contentType: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO p2p_order_proofs (order_uid, image, content_type) VALUES ($1,$2,$3)
+       ON CONFLICT (order_uid) DO UPDATE SET image = EXCLUDED.image, content_type = EXCLUDED.content_type, created_at = now()`,
+      [orderUid, image, contentType],
+    );
+  }
+  async getProof(orderUid: string): Promise<{ image: Buffer; contentType: string } | null> {
+    const res = await this.pool.query(`SELECT image, content_type FROM p2p_order_proofs WHERE order_uid = $1`, [orderUid]);
+    return res.rows[0] ? { image: res.rows[0].image as Buffer, contentType: res.rows[0].content_type } : null;
   }
 }
 
