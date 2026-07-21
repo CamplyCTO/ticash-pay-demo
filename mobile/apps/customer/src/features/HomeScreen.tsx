@@ -40,11 +40,14 @@ export function HomeScreen() {
   const txq = useTransactions(50);
   const me = data && isCustomerMe(data) ? data : null;
   const wallets = me?.wallets ?? [];
-  // Home balance shows the user's country currency (BR→BRL, MX→MXN, …).
+  // The main balance ALWAYS shows the account's country currency (BR→BRL, HT→HTG,
+  // MX→MXN, …), even at 0 — NEVER fall back to a foreign-currency wallet. Any other
+  // currency the account holds (USDT, or a BRL balance on a Haiti account) shows as a
+  // chip below. (A Haiti account must never display its balance as R$.)
   const homeCcy = currencyForCountry(me?.user.country) as Currency;
-  const hero = wallets.find((w) => w.currency === homeCcy) ?? wallets[0] ?? { currency: homeCcy, balanceMinor: '0' };
+  const hero = wallets.find((w) => w.currency === homeCcy) ?? { currency: homeCcy, balanceMinor: '0' };
   const parts = formatMoneyParts(hero.balanceMinor, hero.currency);
-  const others = wallets.filter((w) => w !== hero);
+  const others = wallets.filter((w) => w.currency !== homeCcy);
   const recent = (txq.data ?? []).slice(0, 4);
   const pendingCashout = useCashoutPending().data ?? [];
   const refreshAll = () => { void refetchMe(); void txq.refetch(); };
