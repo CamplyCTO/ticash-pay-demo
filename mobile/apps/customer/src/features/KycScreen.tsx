@@ -2,9 +2,10 @@ import React from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Chip, Divider, Row, Screen, Skeleton, Text, useTheme, useToast, type ChipTone } from '@ticash/ui';
-import { isCustomerMe } from '@ticash/api-client';
+import { isCustomerMe, symbolOf } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
 import { messageForError, useKycLimits, useKycStart, useMe } from '@ticash/core';
+import { currencyForCountry } from './auth/countries';
 
 const STATUS_TONE: Record<string, ChipTone> = { approved: 'success', pending: 'warning', review: 'info', rejected: 'danger' };
 
@@ -18,6 +19,9 @@ export function KycScreen() {
 
   const kyc = me.data && isCustomerMe(me.data) ? me.data.kyc : null;
   const statusKey = (kyc?.status ?? 'pending') as 'approved' | 'pending' | 'review' | 'rejected';
+  // Limits are shown in the account's country currency (BR→R$, MX→MX$, HT→G, …).
+  const country = me.data && isCustomerMe(me.data) ? me.data.user.country : null;
+  const sym = symbolOf(currencyForCountry(country));
 
   return (
     <Screen scroll footer={
@@ -47,7 +51,7 @@ export function KycScreen() {
           (limits.data ?? []).map((l, i, arr) => (
             <Row key={l.level} style={{ justifyContent: 'space-between', paddingVertical: t.spacing(3.5), borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: t.colors.divider }}>
               <Text variant="body" weight={l.level === (kyc?.level ?? 0) ? 'bold' : 'regular'}>{tr('profile.level')} {l.level}</Text>
-              <Text variant="body" weight="semibold">R$ {l.cap.toLocaleString('pt-BR')} <Text variant="caption" color="textMuted">{tr('kyc.perTx')}</Text></Text>
+              <Text variant="body" weight="semibold">{sym} {l.cap.toLocaleString('pt-BR')} <Text variant="caption" color="textMuted">{tr('kyc.perTx')}</Text></Text>
             </Row>
           ))
         )}
