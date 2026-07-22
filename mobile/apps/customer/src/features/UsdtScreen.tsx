@@ -4,9 +4,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod } from '@ticash/api-client';
+import { formatMoneyParts, isCustomerMe, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod } from '@ticash/api-client';
+import { currencyForCountry } from './auth/countries';
 import {
   messageForError,
+  useMe,
   useOpenP2POrder,
   useP2POffers,
   useMyP2POffers,
@@ -362,9 +364,12 @@ function SellForm({ onDone }: { onDone: () => void }) {
   const toast = useToast();
   const { t: tr } = useI18n();
   const create = useCreateP2POffer();
+  const me = useMe();
 
   const [amount, setAmount] = useState('');
-  const [fiat, setFiat] = useState<Currency>('BRL');
+  // Default the receiving currency to the seller's own country (HT→HTG, MX→MXN, …);
+  // they can still pick another. Never silently default a Haiti seller to R$.
+  const [fiat, setFiat] = useState<Currency>(() => (me.data && isCustomerMe(me.data) ? currencyForCountry(me.data.user.country) : 'BRL') as Currency);
   const [price, setPrice] = useState('');
   const [min, setMin] = useState('');
   const [max, setMax] = useState('');
