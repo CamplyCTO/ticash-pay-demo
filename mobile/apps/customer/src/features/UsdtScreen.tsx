@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
-import { formatMoneyParts, isCustomerMe, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod } from '@ticash/api-client';
+import { formatMoneyParts, isCustomerMe, type Currency, type P2POffer, type P2POrder, type P2PPaymentMethod, type WithdrawalRequest } from '@ticash/api-client';
 import { currencyForCountry } from './auth/countries';
 import {
   messageForError,
@@ -21,6 +21,10 @@ import {
   useDisputeP2POrder,
   useCancelP2POrder,
   useUsdtDeposit,
+  useUsdtWithdrawFee,
+  useUsdtWithdraw,
+  useUsdtWithdrawals,
+  useUsdtWithdrawCancel,
 } from '@ticash/core';
 import { useI18n } from '@ticash/i18n';
 
@@ -465,7 +469,29 @@ function SellForm({ onDone }: { onDone: () => void }) {
 }
 
 // ---- Deposit: on-ramp USDT from an external crypto wallet -----------------
+// The "Depositar" tab holds both the on-ramp (Depositar) and the off-ramp
+// (Sacar). A small segmented control switches between them.
 function DepositTab() {
+  const t = useTheme();
+  const [mode, setMode] = useState<'in' | 'out'>('in');
+  return (
+    <View style={{ gap: t.spacing(4) }}>
+      <Row style={{ backgroundColor: t.colors.surface, borderRadius: t.radius.md, padding: t.spacing(0.5) }}>
+        {(['in', 'out'] as const).map((k) => {
+          const active = mode === k;
+          return (
+            <Pressable key={k} onPress={() => setMode(k)} style={{ flex: 1, paddingVertical: t.spacing(2), borderRadius: t.radius.sm, alignItems: 'center', backgroundColor: active ? t.colors.background : 'transparent' }}>
+              <Text weight={active ? 'bold' : 'semibold'} color={active ? 'primary' : 'textMuted'}>{k === 'in' ? 'Depositar' : 'Sacar'}</Text>
+            </Pressable>
+          );
+        })}
+      </Row>
+      {mode === 'in' ? <DepositOnRamp /> : <WithdrawOffRamp />}
+    </View>
+  );
+}
+
+function DepositOnRamp() {
   const t = useTheme();
   const toast = useToast();
   const { t: tr } = useI18n();
@@ -509,6 +535,92 @@ function DepositTab() {
           onError: (e) => toast.error(messageForError(e, tr)),
         });
       }} />
+    </View>
+  );
+}
+
+// ---- Withdraw: off-ramp USDT to an external crypto wallet (TRC20) ----------
+const WITHDRAW_STATUS: Record<WithdrawalRequest['status'], { label: string; color: 'primary' | 'success' | 'danger' | 'textMuted' }> = {
+  pending: { label: 'Pendente · enviando', color: 'primary' },
+  completed: { label: 'Concluído', color: 'success' },
+  rejected: { label: 'Devolvido', color: 'danger' },
+};
+
+function WithdrawOffRamp() {
+  const t = useTheme();
+  const toast = useToast();
+  const { t: tr } = useI18n();
+  const me = useMe();
+  const feeQ = useUsdtWithdrawFee();
+  const list = useUsdtWithdrawals();
+  const withdraw = useUsdtWithdraw();
+  const cancel = useUsdtWithdrawCancel();
+  const [address, setAddress] = useState('');
+  const [amount, setAmount] = useState('');
+
+  const balMinor = BigInt(
+    (me.data && isCustomerMe(me.data) ? me.data.wallets.find((w) => w.currency === 'USDT')?.balanceMinor : '0') || '0',
+  );
+  const feeMinor = BigInt(feeQ.data?.feeMinor ?? '0');
+  const amountMinor = (() => { try { return BigInt(Math.round(Number(amount || '0') * 1e6)); } catch { return 0n; } })();
+  const netMinor = amountMinor > feeMinor ? amountMinor - feeMinor : 0n;
+  const overBalance = amountMinor > balMinor;
+  const canSubmit = address.trim().length >= 20 && amountMinor > feeMinor && !overBalance && !withdraw.isPending;
+
+  const submit = () => {
+    withdraw.mutate({ address: address.trim(), amount: amount.trim() }, {
+      onSuccess: () => { toast.success('Saque solicitado. Você recebe assim que o operador enviar.'); setAddress(''); setAmount(''); },
+      onError: (e) => toast.error(messageForError(e, tr)),
+    });
+  };
+
+  return (
+    <View style={{ gap: t.spacing(4) }}>
+      <Text variant="body" color="textMuted">Envie USDT da sua carteira Ticash para uma carteira externa (rede TRC20). O valor sai do seu saldo na hora e é enviado após conferência do operador.</Text>
+      <Card style={{ gap: t.spacing(1) }}>
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Text variant="caption" color="textMuted">Saldo disponível</Text>
+          <Text weight="bold">{money(balMinor.toString(), 'USDT')} USDT</Text>
+        </Row>
+      </Card>
+      <Input label="Endereço da carteira (TRC20)" value={address} onChangeText={setAddress} autoCapitalize="none" autoCorrect={false} placeholder="T..." />
+      <Input label="Quanto de USDT" value={amount} onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'))} keyboardType="decimal-pad" placeholder="0.00" />
+      {amountMinor > 0n && (
+        <Card style={{ gap: t.spacing(0.5) }}>
+          <Line label="Taxa da rede/plataforma" value={`${money(feeMinor.toString(), 'USDT')} USDT`} />
+          <Line label="Você recebe (líquido)" value={`${money(netMinor.toString(), 'USDT')} USDT`} strong />
+        </Card>
+      )}
+      {overBalance && <Text variant="caption" color="danger">Valor acima do seu saldo.</Text>}
+      <Button title="Sacar USDT" disabled={!canSubmit} loading={withdraw.isPending} onPress={submit} />
+
+      {(list.data?.length ?? 0) > 0 && (
+        <View style={{ gap: t.spacing(2) }}>
+          <Divider />
+          <Text variant="subheading">Meus saques</Text>
+          {list.data!.map((w) => {
+            const s = WITHDRAW_STATUS[w.status];
+            return (
+              <Card key={w.id} style={{ gap: t.spacing(1) }}>
+                <Row style={{ justifyContent: 'space-between' }}>
+                  <Text weight="bold">{money(w.amountMinor, 'USDT')} USDT</Text>
+                  <Text variant="caption" color={s.color} weight="semibold">{s.label}</Text>
+                </Row>
+                <Text variant="caption" color="textMuted" numberOfLines={1}>{`${w.address} · ${w.network}`}</Text>
+                {w.status === 'completed' && w.providerRef && (
+                  <Text variant="caption" color="textMuted" numberOfLines={1}>{`tx: ${w.providerRef}`}</Text>
+                )}
+                {w.status === 'pending' && (
+                  <Button title="Cancelar saque" variant="secondary" loading={cancel.isPending} onPress={() => cancel.mutate(w.id, {
+                    onSuccess: () => toast.success('Saque cancelado. USDT devolvido ao saldo.'),
+                    onError: (e) => toast.error(messageForError(e, tr)),
+                  })} />
+                )}
+              </Card>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

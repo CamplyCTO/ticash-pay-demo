@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow } from '@ticash/api-client';
+import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow, WithdrawalRequest } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -93,6 +93,37 @@ export function useUsdtDeposit() {
     mutationFn: (amount: string) => api.usdtDeposit(amount),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['me'] }),
   });
+}
+
+// ---- USDT withdrawal / off-ramp ("Sacar USDT") ----
+/** Flat platform fee (USDT minor) charged on each withdrawal. */
+export function useUsdtWithdrawFee() {
+  const enabled = useAuthed();
+  return useQuery<{ feeMinor: string }>({ queryKey: ['usdt-withdraw-fee'], queryFn: () => api.usdtWithdrawFee(), enabled, staleTime: 60_000 });
+}
+/** The caller's own withdrawal requests (pending/completed/rejected). Polls so a
+ *  status change (operator sends the USDT) shows up without a manual refresh. */
+export function useUsdtWithdrawals() {
+  const enabled = useAuthed();
+  return useQuery<WithdrawalRequest[]>({ queryKey: ['usdt-withdrawals'], queryFn: () => api.usdtWithdrawals(), enabled, refetchInterval: 20_000 });
+}
+const invalidateWithdrawals = (qc: ReturnType<typeof useQueryClient>) => {
+  void qc.invalidateQueries({ queryKey: ['usdt-withdrawals'] });
+  void qc.invalidateQueries({ queryKey: ['me'] });
+  void qc.invalidateQueries({ queryKey: ['transactions'] });
+};
+/** Request a withdrawal — HOLDS the USDT immediately (wallet debited). */
+export function useUsdtWithdraw() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { address: string; amount: string }) => api.usdtWithdraw(input),
+    onSuccess: () => invalidateWithdrawals(qc),
+  });
+}
+/** Cancel your own still-pending withdrawal — refunds the held USDT. */
+export function useUsdtWithdrawCancel() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api.usdtWithdrawCancel(id), onSuccess: () => invalidateWithdrawals(qc) });
 }
 
 // ---- Cash-out approval (customer approves an agent-initiated withdrawal) ----

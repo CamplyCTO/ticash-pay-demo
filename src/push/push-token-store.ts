@@ -11,6 +11,8 @@ export interface PushTokenStore {
   disable(expoToken: string): Promise<void>;
   /** Active (not opted-out) tokens for a user. */
   tokensForUser(userId: string): Promise<string[]>;
+  /** Every active (not opted-out) device token, across all users — for broadcasts. */
+  allActiveTokens(): Promise<string[]>;
 }
 
 interface Row {
@@ -34,6 +36,11 @@ export class InMemoryPushTokenStore implements PushTokenStore {
     for (const [token, r] of this.byToken) if (r.userId === userId && !r.disabled) out.push(token);
     return out;
   }
+  async allActiveTokens(): Promise<string[]> {
+    const out: string[] = [];
+    for (const [token, r] of this.byToken) if (!r.disabled) out.push(token);
+    return out;
+  }
 }
 
 export class PgPushTokenStore implements PushTokenStore {
@@ -53,6 +60,10 @@ export class PgPushTokenStore implements PushTokenStore {
   }
   async tokensForUser(userId: string): Promise<string[]> {
     const res = await this.pool.query(`SELECT expo_token FROM push_tokens WHERE user_id = $1 AND disabled = false`, [userId]);
+    return res.rows.map((r) => r.expo_token as string);
+  }
+  async allActiveTokens(): Promise<string[]> {
+    const res = await this.pool.query(`SELECT DISTINCT expo_token FROM push_tokens WHERE disabled = false`);
     return res.rows.map((r) => r.expo_token as string);
   }
 }

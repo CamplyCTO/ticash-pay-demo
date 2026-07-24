@@ -122,6 +122,13 @@ export const config = {
   cashout: {
     expiryMinutes: Number(process.env.CASHOUT_EXPIRY_MIN ?? 30),
   },
+  /** USDT withdrawal (off-ramp). Fee + minimum in USDT minor units (6 dp). */
+  withdrawal: {
+    asset: 'USDT' as const,
+    feeMinor: BigInt(process.env.USDT_WITHDRAW_FEE_MINOR ?? '0'), // e.g. 1000000 = 1 USDT flat fee
+    network: process.env.USDT_WITHDRAW_NETWORK ?? 'TRC20',
+    minAmountMinor: BigInt(process.env.USDT_WITHDRAW_MIN_MINOR ?? '1000000'), // 1 USDT minimum
+  },
   /** Push notifications (Phase 3 WS-5). On by default; uses Expo's push API. */
   push: {
     enabled: (process.env.PUSH ?? 'on') !== 'off',

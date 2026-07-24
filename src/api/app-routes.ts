@@ -480,6 +480,30 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     });
   }
 
+  // ---- USDT withdrawal (off-ramp): request HOLDS the USDT; operator sends + settles ----
+  if (deps.withdrawal) {
+    const wd = deps.withdrawal.service;
+    app.get('/app/usdt/withdraw/fee', async () => ({ feeMinor: wd.feeMinor().toString() }));
+    app.post('/app/usdt/withdraw', async (req, reply) => {
+      const me = await requireCustomer(req);
+      const b = z.object({ address: z.string().min(1).max(120), amount: amountSchema }).parse(req.body);
+      reply.status(201);
+      const w = await wd.request({ customerId: me.externalId, amountMinor: money(b.amount, 'USDT'), address: b.address.trim() });
+      req.log.info({ audit: 'usdt.withdraw.request', customerId: me.externalId, withdrawalId: w.id }, 'usdt withdrawal requested');
+      return w;
+    });
+    app.get('/app/usdt/withdrawals', async (req) => {
+      const me = await requireCustomer(req);
+      return wd.listByCustomer(me.externalId, 50);
+    });
+    // Customer can cancel their OWN request while it's still pending (refund).
+    app.post('/app/usdt/withdrawals/:id/cancel', async (req) => {
+      const me = await requireCustomer(req);
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return wd.reject({ id: p.id, byCustomerId: me.externalId });
+    });
+  }
+
   // ---- PIX deposit (Lytex on-ramp): fund your own BRL wallet ---------------
   // Creates a PIX charge for the authenticated customer and records an intent;
   // the signed Lytex webhook (POST /webhooks/lytex) credits THIS wallet the

@@ -198,6 +198,38 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // ---- USDT withdrawals: operator sends the USDT on-chain, then completes/rejects ----
+  if (deps.withdrawal) {
+    const wd = deps.withdrawal.service;
+    app.get('/withdrawals', async () => wd.listPending());
+    app.post('/withdrawals/:id/complete', async (req) => {
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      const b = z.object({ providerRef: z.string().min(1).max(200).optional() }).parse((req.body ?? {}) as object);
+      return wd.complete({ id: p.id, ...(b.providerRef ? { providerRef: b.providerRef } : {}) });
+    });
+    app.post('/withdrawals/:id/reject', async (req) => {
+      const p = z.object({ id: z.string().min(1) }).parse(req.params);
+      return wd.reject({ id: p.id });
+    });
+  }
+
+  // ---- Admin broadcast: push a message/notification to every app user --------
+  if (deps.push) {
+    app.post('/notifications/broadcast', async (req) => {
+      const b = z.object({
+        title: z.string().trim().min(1).max(80),
+        body: z.string().trim().min(1).max(400),
+      }).parse(req.body);
+      const recipients = await deps.push!.service.broadcast({
+        title: b.title,
+        body: b.body,
+        data: { type: 'admin_broadcast', screen: '/(app)/activity' },
+      });
+      req.log.info({ audit: 'push.broadcast', recipients }, 'admin broadcast sent');
+      return { recipients };
+    });
+  }
+
   // ---- USDT deposit settlement (NOWPayments IPN) --------------------------
   if (deps.deposits) {
     const dep = deps.deposits;

@@ -18,6 +18,7 @@ import {
   createP2PStore,
   createSettingsStore,
   createCashoutStore,
+  createWithdrawalStore,
 } from '../ledger/store-factory';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
@@ -49,6 +50,7 @@ import { PushService } from '../push/push-service';
 import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
 import { CashoutService } from '../cashout/cashout-service';
+import { WithdrawalService } from '../withdrawal/withdrawal-service';
 import { NowPaymentsAdapter } from '../deposits/nowpayments-adapter';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
@@ -83,6 +85,8 @@ export interface ServerDeps {
   p2p?: { service: P2PService };
   /** Cash-out approval: agent requests → customer approves before any debit. */
   cashout?: { service: CashoutService };
+  /** USDT withdrawal (off-ramp): customer requests → held → operator sends + settles. */
+  withdrawal?: { service: WithdrawalService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -154,6 +158,8 @@ export function defaultDeps(): ServerDeps {
   deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p, settingsStore) };
   // Cash-out approval: an agent's cash-out becomes a request the customer approves.
   deps.cashout = { service: new CashoutService(ledger, createCashoutStore(), config.cashout) };
+  // USDT withdrawal (off-ramp): customer requests → USDT held → operator sends on-chain + settles.
+  deps.withdrawal = { service: new WithdrawalService(ledger, createWithdrawalStore(), config.withdrawal) };
   // USDT on-ramp (NOWPayments) — enabled once the API key is present.
   if (config.nowpayments.enabled) {
     deps.deposits = { gateway: new NowPaymentsAdapter(config.nowpayments), intents: createPaymentIntentStore(), events: createProviderEventStore(), callbackUrl: config.nowpayments.callbackUrl };

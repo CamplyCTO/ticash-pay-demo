@@ -235,6 +235,43 @@ export class LedgerService {
     return this.store.post(ops.p2pUnlock(args));
   }
 
+  /** USDT withdrawal — hold the customer's USDT (wallet → withdrawal_suspense). Fails if insufficient. */
+  usdtWithdrawHold(args: {
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    correlationId?: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.usdtWithdrawHold(args));
+  }
+
+  /** USDT withdrawal — settle a confirmed on-chain send (suspense → settlement + fee). */
+  usdtWithdrawSettle(args: {
+    currency: Currency;
+    amountMinor: bigint;
+    feeMinor: bigint;
+    idempotencyKey: string;
+    correlationId: string;
+    externalRef?: string;
+  }): Promise<PostedJournal> {
+    if (args.feeMinor < 0n || args.feeMinor > args.amountMinor) {
+      throw new LedgerError(`withdrawal fee ${args.feeMinor} out of range for ${args.amountMinor}`, 'VALIDATION');
+    }
+    return this.store.post(ops.usdtWithdrawSettle(args));
+  }
+
+  /** USDT withdrawal — refund a rejected/failed withdrawal (suspense → wallet). */
+  usdtWithdrawRefund(args: {
+    customerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.usdtWithdrawRefund(args));
+  }
+
   getBalance(spec: AccountSpec): Promise<bigint> {
     return this.store.getBalance(spec);
   }

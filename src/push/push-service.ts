@@ -25,6 +25,27 @@ export class PushService {
     return this.tokens.disable(expoToken);
   }
 
+  /**
+   * Admin broadcast: send a free-text message to every active device. Sent in
+   * chunks of 100 (Expo's per-request cap). Best-effort — a failed chunk is
+   * skipped so one bad batch can't sink the whole send; returns the number of
+   * devices successfully handed to the sender.
+   */
+  async broadcast(n: PushNotification): Promise<number> {
+    const tokens = [...new Set(await this.tokens.allActiveTokens())];
+    let sent = 0;
+    for (let i = 0; i < tokens.length; i += 100) {
+      const chunk = tokens.slice(i, i + 100);
+      try {
+        await this.sender.send(chunk, n);
+        sent += chunk.length;
+      } catch {
+        /* best-effort: skip a failed chunk, keep going */
+      }
+    }
+    return sent;
+  }
+
   /** Send a notification to every active device of every app_user behind a party id. */
   async dispatchToExternalId(externalId: string, n: PushNotification): Promise<number> {
     const users = await this.authStore.findUsersByExternalId(externalId);

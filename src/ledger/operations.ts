@@ -20,7 +20,7 @@ export function agentCommission(agentId: string, currency: Currency): AccountSpe
   return { ownerType: 'agent', ownerId: agentId, kind: 'agent_commission', currency };
 }
 export function systemAccount(
-  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense' | 'provider_fee',
+  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense' | 'provider_fee' | 'withdrawal_suspense',
   currency: Currency,
 ): AccountSpec {
   return { ownerType: 'system', ownerId: null, kind, currency };
@@ -480,6 +480,69 @@ export function p2pUnlock(args: {
     postings: [
       debit(p2pEscrow(merchantId, currency), amountMinor), // escrow -> wallet
       credit(customerWallet(merchantId, currency), amountMinor),
+    ],
+  };
+}
+
+/**
+ * USDT withdrawal (off-ramp) — three journals over the lifecycle, all Σ=0:
+ *   HOLD:   wallet -> withdrawal_suspense                     (request; wallet non-negative check applies)
+ *   SETTLE: withdrawal_suspense -> settlement (+ fee_revenue) (admin confirms the on-chain send; fee retained)
+ *   REFUND: withdrawal_suspense -> wallet                     (rejected/failed; customer made whole)
+ */
+export function usdtWithdrawHold(args: {
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  correlationId?: string;
+}): JournalDraft {
+  return {
+    type: 'usdt_withdraw_hold',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.correlationId ? { correlationId: args.correlationId } : {}),
+    postings: [
+      debit(customerWallet(args.customerId, args.currency), args.amountMinor),
+      credit(systemAccount('withdrawal_suspense', args.currency), args.amountMinor),
+    ],
+  };
+}
+
+export function usdtWithdrawSettle(args: {
+  currency: Currency;
+  amountMinor: bigint; // total held
+  feeMinor: bigint; // platform withdrawal fee retained (0 allowed; must be <= amount)
+  idempotencyKey: string;
+  correlationId: string;
+  externalRef?: string; // on-chain tx hash / provider payout id
+}): JournalDraft {
+  const net = args.amountMinor - args.feeMinor;
+  const postings: PostingDraft[] = [debit(systemAccount('withdrawal_suspense', args.currency), args.amountMinor)];
+  if (net > 0n) postings.push(credit(systemAccount('settlement', args.currency), net));
+  if (args.feeMinor > 0n) postings.push(credit(systemAccount('fee_revenue', args.currency), args.feeMinor));
+  return {
+    type: 'usdt_withdraw_settle',
+    idempotencyKey: args.idempotencyKey,
+    correlationId: args.correlationId,
+    ...(args.externalRef ? { externalRef: args.externalRef } : {}),
+    postings,
+  };
+}
+
+export function usdtWithdrawRefund(args: {
+  customerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  correlationId: string;
+}): JournalDraft {
+  return {
+    type: 'usdt_withdraw_refund',
+    idempotencyKey: args.idempotencyKey,
+    correlationId: args.correlationId,
+    postings: [
+      debit(systemAccount('withdrawal_suspense', args.currency), args.amountMinor),
+      credit(customerWallet(args.customerId, args.currency), args.amountMinor),
     ],
   };
 }

@@ -168,6 +168,22 @@ export interface CashoutRequest {
   updatedAt: string;
 }
 
+// ---- USDT withdrawal (off-ramp / "Sacar USDT"). BigInt fields arrive as strings ----
+export type WithdrawalStatus = 'pending' | 'completed' | 'rejected';
+export interface WithdrawalRequest {
+  id: string;
+  customerId: string;
+  currency: Currency; // 'USDT'
+  amountMinor: string; // total held from the wallet
+  feeMinor: string; // platform fee retained on completion
+  address: string; // external destination wallet
+  network: string; // e.g. 'TRC20'
+  status: WithdrawalStatus;
+  providerRef: string | null; // on-chain tx hash (set on completion)
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---- WS-4 P2P USDT marketplace (BigInt fields arrive as strings) ----
 export interface P2PPaymentMethod {
   type: string;

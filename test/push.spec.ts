@@ -48,6 +48,28 @@ describe('PushService (unit)', () => {
     expect(await svc.dispatchToExternalId('nobody', { title: 'x', body: 'y' })).toBe(0);
     expect(cap.sent.length).toBe(0);
   });
+
+  it('broadcast reaches every active device across users, dedups, chunks at 100, skips opted-out', async () => {
+    const authStore = new InMemoryAuthStore();
+    const pushStore = new InMemoryPushTokenStore();
+    const cap = new CapturingPush();
+    const svc = new PushService(pushStore, authStore, cap);
+    const a = await authStore.createUser({ role: 'customer', externalId: 'a', phone: '+5500001' });
+    const b = await authStore.createUser({ role: 'customer', externalId: 'b', phone: '+5500002' });
+    // 150 devices spread over two users -> two chunks (100 + 50)
+    for (let i = 0; i < 100; i++) await svc.register({ userId: a.id, expoToken: `ExponentPushToken[a${i}]` });
+    for (let i = 0; i < 50; i++) await svc.register({ userId: b.id, expoToken: `ExponentPushToken[b${i}]` });
+    await svc.register({ userId: b.id, expoToken: 'ExponentPushToken[a0]' }); // dup token -> reassigned, still one
+    await svc.unregister('ExponentPushToken[b0]'); // one opt-out
+
+    const recipients = await svc.broadcast({ title: 'Aviso', body: 'Olá a todos' });
+    expect(recipients).toBe(149); // 150 unique - 1 opted out
+    // chunked in <=100 batches
+    expect(cap.sent.every((s) => s.tokens.length <= 100)).toBe(true);
+    const all = cap.sent.flatMap((s) => s.tokens);
+    expect(new Set(all).size).toBe(149); // no dup delivered
+    expect(all).not.toContain('ExponentPushToken[b0]'); // opted out excluded
+  });
 });
 
 describe('/app/push + dispatch on money-in (HTTP)', () => {
@@ -118,5 +140,22 @@ describe('/app/push + dispatch on money-in (HTTP)', () => {
     expect(ci.statusCode).toBe(201); // money op succeeds
     await until(() => cap.sent.length > 0, 40); // give any dispatch a chance to land
     expect(cap.sent.length).toBe(0); // but no push (opted out)
+  });
+
+  it('admin broadcast pushes a free-text message to all registered devices', async () => {
+    // two customers, each with a device
+    for (const phone of ['+5511900000200', '+5511900000201']) {
+      await post('/app/auth/register', { phone });
+      const v = await post('/app/auth/verify', { phone, code: otp.last });
+      const tok = `Bearer ${v.json().accessToken}`;
+      await post('/app/push/register', { expoToken: `ExponentPushToken[${phone}]` }, { authorization: tok });
+    }
+    const bad = await post('/notifications/broadcast', { title: '', body: 'x' });
+    expect(bad.statusCode).toBe(400); // title required
+    const r = await post('/notifications/broadcast', { title: 'Manutenção', body: 'App em manutenção às 22h.' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().recipients).toBe(2);
+    expect(cap.sent.flatMap((s) => s.tokens).sort()).toEqual(['ExponentPushToken[+5511900000200]', 'ExponentPushToken[+5511900000201]']);
+    expect(cap.sent[0]?.n.title).toBe('Manutenção');
   });
 });

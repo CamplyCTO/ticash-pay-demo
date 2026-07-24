@@ -18,6 +18,7 @@ import {
   type TransferPricing,
   type TransferResult,
   type TxRow,
+  type WithdrawalRequest,
 } from './types';
 
 export interface TicashApiOptions {
@@ -171,6 +172,22 @@ export class TicashApi {
   // address is where the user sends USDT. Their wallet is credited on settlement.
   usdtDeposit(amount: string): Promise<{ paymentId: string; payAddress: string; payAmount: string; payCurrency: string; status: string }> {
     return this.request('POST', '/app/usdt/deposit', { auth: true, body: { amount } });
+  }
+
+  // USDT withdrawal (off-ramp / "Sacar USDT"): the request HOLDS the USDT (the
+  // wallet is debited immediately); the operator sends it on-chain and completes
+  // it, or it is rejected/cancelled and the USDT is refunded.
+  usdtWithdrawFee(): Promise<{ feeMinor: string }> {
+    return this.request('GET', '/app/usdt/withdraw/fee', { auth: true });
+  }
+  usdtWithdraw(input: { address: string; amount: string }): Promise<WithdrawalRequest> {
+    return this.request('POST', '/app/usdt/withdraw', { auth: true, body: input });
+  }
+  usdtWithdrawals(): Promise<WithdrawalRequest[]> {
+    return this.request('GET', '/app/usdt/withdrawals', { auth: true });
+  }
+  usdtWithdrawCancel(id: string): Promise<WithdrawalRequest> {
+    return this.request('POST', `/app/usdt/withdrawals/${id}/cancel`, { auth: true, body: {} });
   }
 
   // PIX deposit (Lytex on-ramp): create a BRL charge; returns the PIX copy-and-paste
