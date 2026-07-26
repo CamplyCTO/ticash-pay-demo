@@ -126,8 +126,8 @@
       <div class="panel">
         <h2>🪙 P2P USDT · liquidações (quem vende / quem compra)</h2>
         <div class="body" style="max-height:320px; overflow:auto">
-          <table><thead><tr><th>ordem</th><th>vendedor</th><th>comprador</th><th class="num">USDT</th><th class="num">valor</th><th>status</th><th>método</th><th>data</th></tr></thead><tbody id="p2porders"></tbody></table>
-          <div class="muted" style="margin-top:8px">Todas as ordens (mais recentes primeiro). <b>released</b> = liquidada (USDT foi do vendedor ao comprador). Para <b>disputed</b> / <b>payment_submitted</b>: confira o comprovante e use <b>Resolver ordem P2P</b> — <b>release</b> libera ao comprador, <b>cancel</b> devolve a reserva ao vendedor.</div>
+          <table><thead><tr><th>vendedor</th><th>comprador</th><th class="num">USDT</th><th class="num">valor</th><th>status</th><th>método</th><th>data</th><th>ação</th></tr></thead><tbody id="p2porders"></tbody></table>
+          <div class="muted" style="margin-top:8px">Todas as ordens (mais recentes primeiro). <b>released</b> = liquidada (USDT foi do vendedor ao comprador). Nas ordens <b>disputed</b> / <b>payment_submitted</b>: confira o comprovante e clique em <b>Liberar</b> (USDT vai ao comprador) ou <b>Cancelar</b> (devolve a reserva ao vendedor). Não precisa copiar código.</div>
         </div>
       </div>
       <div class="panel">
@@ -189,6 +189,13 @@ async function wdComplete(id) {
 async function wdReject(id) {
   if (!window.confirm('Rejeitar este saque e devolver o USDT ao cliente?')) return;
   try { await api('POST', '/withdrawals/'+id+'/reject', {}); toast('✓ Saque rejeitado — USDT devolvido ao cliente'); refresh(); }
+  catch (e) { toast(e.message, true); }
+}
+// P2P order row actions (disputed / payment_submitted). Full id passed automatically.
+async function p2pResolve(id, action) {
+  const verb = action === 'release' ? 'LIBERAR o USDT ao comprador' : 'CANCELAR e devolver a reserva ao vendedor';
+  if (!window.confirm('Confirmar: ' + verb + '?')) return;
+  try { const r = await api('POST', '/p2p/orders/'+id+'/resolve', { action }); toast('✓ Ordem ' + r.status); refresh(); }
   catch (e) { toast(e.message, true); }
 }
 const chipFor = (t) => ({transfer:'blue',payout:'em',cash_in:'em',cash_out:'amber',fund_wallet:'gray',float_topup:'gray'}[t] || 'gray');
@@ -261,15 +268,18 @@ async function refresh() {
     try {
       const orders = await api('GET','/p2p/orders?status=all');
       const ost = (s) => ({disputed:'red',payment_submitted:'amber',released:'em',cancelled:'gray',created:'blue'}[s] || 'gray');
+      const resolvable = (s) => s === 'disputed' || s === 'payment_submitted';
       $('p2porders').innerHTML = orders.map(o => `<tr>
-        <td class="mono" style="font-size:9px">${String(o.id).slice(0,8)}</td>
-        <td class="muted">${o.merchantId}</td>
+        <td class="muted" title="${o.id}">${o.merchantId}</td>
         <td class="muted">${o.buyerId}</td>
         <td class="num">${fmt(o.assetMinor,'USDT')}</td>
         <td class="num">${fmt(o.fiatMinor,o.fiatCurrency)} ${o.fiatCurrency}</td>
         <td><span class="chip ${ost(o.status)}">${o.status}</span></td>
         <td class="muted">${(o.method && o.method.label) || '-'}</td>
-        <td class="muted" style="font-size:9px">${new Date(o.createdAt).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan=8 class="muted">nenhuma ordem</td></tr>';
+        <td class="muted" style="font-size:9px">${new Date(o.createdAt).toLocaleString()}</td>
+        <td style="white-space:nowrap">${resolvable(o.status) ? `
+          <button onclick="p2pResolve('${o.id}','release')" style="background:var(--emerald);color:#04160e;border:0;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">Liberar</button>
+          <button onclick="p2pResolve('${o.id}','cancel')" style="background:transparent;color:var(--red);border:1px solid var(--red);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-left:4px">Cancelar</button>` : '<span class="muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan=8 class="muted">nenhuma ordem</td></tr>';
 
       const offers = await api('GET','/p2p/offers');
       $('p2poffers').innerHTML = offers.map(o => {
@@ -316,7 +326,6 @@ const FORMS = {
   'Taxa do USDT (P2P)': { fields:[['pct','taxa em % (ex: 2 = 2%)']], run: async (v)=>{ if (v.pct==null || String(v.pct).trim()==='') throw new Error('Digite a taxa em %, por ex: 2'); const bps = pctToBps(v.pct); if (bps < 0 || bps > 2000) throw new Error('A taxa deve ser entre 0% e 20%'); const r = await api('POST','/p2p/commission',{bps}); toast('✓ Taxa do USDT agora é '+(r.commissionBps/100)+'%'); return r; } },
   'Enviar aviso a todos (notificação)': { fields:[['title','título (ex: Manutenção)'],['body','mensagem para os usuários']], run: async (v)=>{ if(!String(v.title||'').trim()) throw new Error('Digite o título'); if(!String(v.body||'').trim()) throw new Error('Digite a mensagem'); const r = await api('POST','/notifications/broadcast',{title:String(v.title).trim(),body:String(v.body).trim()}); toast('✓ Aviso enviado para '+(r.recipients||0)+' aparelho(s)'); return r; } },
   'Depositar USDT (merchant)': { fields:[['customerId','merchant (id)'],['amount','USDT (ex: 100)']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:'USDT',amount:v.amount,idempotencyKey:idem()}) },
-  'Resolver ordem P2P': { fields:[['orderId','id da ordem'],['action','release ou cancel']], run: async (v)=>{ const r = await api('POST',`/p2p/orders/${v.orderId}/resolve`,{action:v.action}); toast('✓ Ordem '+r.status); return r; } },
   'KYC': { fields:[['externalId','cliente'],['status','approved/pending/review/rejected']], run:(v)=>api('POST',`/customers/${v.externalId}/kyc`,{level:v.status==='approved'?2:1,status:v.status}) },
   'Fund wallet': { fields:[['customerId','cliente'],['currency','moeda (BRL, HTG, USD, MXN, DOP)'],['amount','valor']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:(v.currency||'BRL').trim().toUpperCase(),amount:v.amount,idempotencyKey:idem()}) },
   'Cobrança PIX (entrada)': { fields:[['customerId','cliente'],['amount','valor (R$)'],['name','nome do pagador'],['cpfCnpj','CPF (só números)']], run: async (v)=>{ const r = await api('POST','/payments/charge',{customerId:v.customerId,amount:v.amount,methods:['pix'],payer:{name:v.name,cpfCnpj:v.cpfCnpj}}); if (r.pix && r.pix.copyPaste) window.prompt('PIX copia-e-cola (sandbox) — a carteira é creditada quando o pagamento liquidar (webhook):', r.pix.copyPaste); return r; } },
