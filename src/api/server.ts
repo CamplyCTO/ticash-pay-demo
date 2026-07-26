@@ -228,8 +228,26 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
   // BigInt is not JSON-serializable by default; emit as string everywhere.
   // setReplySerializer applies to ALL routes (unlike setSerializerCompiler).
   app.setReplySerializer((payload) => JSON.stringify(payload, bigintReplacer));
-  app.setErrorHandler((err, _req, reply) => {
+  // Database/network outages surface as driver errors (ECONNREFUSED, timeouts) or
+  // Postgres "cannot connect now" SQLSTATEs. Never leak the raw message (it exposes
+  // the internal DB host/IP) — return a clean, friendly 503 the app can show as-is.
+  const CONNECTION_ERROR_CODES = new Set([
+    'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EPIPE', 'EAI_AGAIN',
+    '08000', '08001', '08003', '08004', '08006', '08007', '08P01', // connection exceptions
+    '57P01', '57P02', '57P03', // admin shutdown / cannot connect now
+    '53300', // too_many_connections
+  ]);
+  app.setErrorHandler((err, req, reply) => {
     const code = (err as { code?: string }).code;
+    if (code && CONNECTION_ERROR_CODES.has(code)) {
+      req.log.error({ err, code }, 'database/connection unavailable');
+      reply.status(503).send({
+        error: 'ServiceUnavailable',
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+      });
+      return;
+    }
     const status =
       code === 'INSUFFICIENT_FUNDS' ? 409 :
       code === 'CONFLICT' ? 409 :
