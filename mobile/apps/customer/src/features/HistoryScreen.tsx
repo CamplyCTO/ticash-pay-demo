@@ -16,6 +16,12 @@ function typeLabel(type: string, tr: Translate): string {
     case 'airtime': return tr('activity.topup');
     case 'payout': return tr('activity.payout');
     case 'reversal': return tr('activity.reversal');
+    case 'usdt_withdraw_hold': return tr('activity.usdtWithdraw');
+    case 'usdt_withdraw_settle': return tr('activity.usdtWithdrawSettle');
+    case 'usdt_withdraw_refund': return tr('activity.usdtWithdrawRefund');
+    case 'p2p_lock': return tr('activity.p2pLock');
+    case 'p2p_release': return tr('activity.p2pRelease');
+    case 'p2p_unlock': return tr('activity.p2pUnlock');
     default: return type;
   }
 }
@@ -28,6 +34,12 @@ const ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   airtime: 'phone-portrait-outline',
   payout: 'paper-plane-outline',
   reversal: 'refresh',
+  usdt_withdraw_hold: 'logo-bitcoin',
+  usdt_withdraw_settle: 'logo-bitcoin',
+  usdt_withdraw_refund: 'logo-bitcoin',
+  p2p_lock: 'logo-bitcoin',
+  p2p_release: 'logo-bitcoin',
+  p2p_unlock: 'logo-bitcoin',
 };
 
 export function HistoryScreen() {

@@ -37,7 +37,7 @@ export const en = {
     greeting: 'Welcome back',
     totalBalance: 'Total balance',
     send: 'Send', deposit: 'Add', receive: 'Receive', topup: 'Top-up', usdt: 'USDT',
-    recent: 'Recent activity', seeAll: 'See all', empty: 'No transactions yet',
+    recent: 'Recent activity', seeAll: 'See all', empty: 'No transactions yet', refreshed: 'Updated',
   },
   deposit: {
     title: 'Add balance', subtitle: 'Add money to your wallet instantly with PIX.',
@@ -64,6 +64,8 @@ export const en = {
   },
   activity: {
     send: 'Sent', deposit: 'Deposit', cashIn: 'Cash in', cashOut: 'Cash out', topup: 'Top-up', payout: 'Payout', reversal: 'Reversal',
+    usdtWithdraw: 'USDT withdrawal', usdtWithdrawRefund: 'USDT withdrawal refunded', usdtWithdrawSettle: 'USDT sent',
+    p2pLock: 'USDT reserved (P2P)', p2pRelease: 'USDT released (P2P)', p2pUnlock: 'USDT returned (P2P)',
     completed: 'Completed', processing: 'Processing',
   },
   receive: {
@@ -123,7 +125,7 @@ export const pt: Dictionary = {
     greeting: 'Bem-vindo de volta',
     totalBalance: 'Saldo total',
     send: 'Enviar', deposit: 'Adicionar', receive: 'Receber', topup: 'Recarga', usdt: 'USDT',
-    recent: 'Atividade recente', seeAll: 'Ver tudo', empty: 'Nenhuma transação ainda',
+    recent: 'Atividade recente', seeAll: 'Ver tudo', empty: 'Nenhuma transação ainda', refreshed: 'Atualizado',
   },
   deposit: {
     title: 'Adicionar saldo', subtitle: 'Coloque dinheiro na sua carteira na hora, com PIX.',
@@ -150,6 +152,8 @@ export const pt: Dictionary = {
   },
   activity: {
     send: 'Enviado', deposit: 'Depósito', cashIn: 'Depósito (agente)', cashOut: 'Saque', topup: 'Recarga', payout: 'Pagamento', reversal: 'Estorno',
+    usdtWithdraw: 'Saque USDT', usdtWithdrawRefund: 'Saque USDT devolvido', usdtWithdrawSettle: 'Saque USDT enviado',
+    p2pLock: 'USDT reservado (P2P)', p2pRelease: 'USDT liberado (P2P)', p2pUnlock: 'USDT devolvido (P2P)',
     completed: 'Concluído', processing: 'Processando',
   },
   receive: {
@@ -204,7 +208,7 @@ export const fr: Dictionary = {
     greeting: 'Bon retour',
     totalBalance: 'Solde total',
     send: 'Envoyer', deposit: 'Ajouter', receive: 'Recevoir', topup: 'Recharge', usdt: 'USDT',
-    recent: 'Activité récente', seeAll: 'Tout voir', empty: 'Aucune transaction',
+    recent: 'Activité récente', seeAll: 'Tout voir', empty: 'Aucune transaction', refreshed: 'Actualisé',
   },
   deposit: {
     title: 'Ajouter du solde', subtitle: 'Ajoutez de l’argent à votre portefeuille instantanément avec PIX.',
@@ -231,6 +235,8 @@ export const fr: Dictionary = {
   },
   activity: {
     send: 'Envoyé', deposit: 'Dépôt', cashIn: 'Dépôt (agent)', cashOut: 'Retrait', topup: 'Recharge', payout: 'Paiement', reversal: 'Remboursement',
+    usdtWithdraw: 'Retrait USDT', usdtWithdrawRefund: 'Retrait USDT remboursé', usdtWithdrawSettle: 'USDT envoyé',
+    p2pLock: 'USDT réservé (P2P)', p2pRelease: 'USDT libéré (P2P)', p2pUnlock: 'USDT retourné (P2P)',
     completed: 'Terminé', processing: 'En cours',
   },
   receive: {

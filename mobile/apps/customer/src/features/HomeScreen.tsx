@@ -11,9 +11,16 @@ import { currencyForCountry } from './auth/countries';
 const TX_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
   transfer: 'arrow-up', fund_wallet: 'arrow-down', cash_in: 'arrow-down', cash_out: 'arrow-up',
   airtime: 'phone-portrait-outline', payout: 'paper-plane-outline', reversal: 'refresh',
+  usdt_withdraw_hold: 'logo-bitcoin', usdt_withdraw_settle: 'logo-bitcoin', usdt_withdraw_refund: 'logo-bitcoin',
+  p2p_lock: 'logo-bitcoin', p2p_release: 'logo-bitcoin', p2p_unlock: 'logo-bitcoin',
 };
 function txLabel(type: string, tr: Translate): string {
-  const k: Record<string, string> = { transfer: 'activity.send', fund_wallet: 'activity.deposit', cash_in: 'activity.cashIn', cash_out: 'activity.cashOut', airtime: 'activity.topup', payout: 'activity.payout', reversal: 'activity.reversal' };
+  const k: Record<string, string> = {
+    transfer: 'activity.send', fund_wallet: 'activity.deposit', cash_in: 'activity.cashIn', cash_out: 'activity.cashOut',
+    airtime: 'activity.topup', payout: 'activity.payout', reversal: 'activity.reversal',
+    usdt_withdraw_hold: 'activity.usdtWithdraw', usdt_withdraw_settle: 'activity.usdtWithdrawSettle', usdt_withdraw_refund: 'activity.usdtWithdrawRefund',
+    p2p_lock: 'activity.p2pLock', p2p_release: 'activity.p2pRelease', p2p_unlock: 'activity.p2pUnlock',
+  };
   return k[type] ? tr(k[type] as never) : type;
 }
 
@@ -50,7 +57,14 @@ export function HomeScreen() {
   const others = wallets.filter((w) => w.currency !== homeCcy);
   const recent = (txq.data ?? []).slice(0, 4);
   const pendingCashout = useCashoutPending().data ?? [];
-  const refreshAll = () => { void refetchMe(); void txq.refetch(); };
+  // Await the refetch and confirm with a toast — a silent refresh made users think
+  // the button did nothing (esp. when data was already up to date).
+  const refreshAll = () => {
+    void (async () => {
+      try { await Promise.all([refetchMe(), txq.refetch()]); toast.success(tr('home.refreshed')); }
+      catch { /* refetch errors surface via the queries' own error states */ }
+    })();
+  };
 
   return (
     <Screen scroll>
