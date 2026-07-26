@@ -139,8 +139,8 @@
       <div class="panel">
         <h2>🏧 Saques USDT · pendentes (enviar on-chain)</h2>
         <div class="body" style="max-height:260px; overflow:auto">
-          <table><thead><tr><th>id</th><th>cliente</th><th class="num">USDT</th><th>endereço (rede)</th><th>data</th></tr></thead><tbody id="withdrawals"></tbody></table>
-          <div class="muted" style="margin-top:8px">O cliente pediu o saque e o USDT já está <b>retido</b>. Envie o USDT para o endereço, depois use <b>Concluir saque USDT</b> (cola o id + o hash da tx). <b>Rejeitar saque USDT</b> devolve o USDT ao cliente.</div>
+          <table><thead><tr><th>cliente</th><th class="num">USDT</th><th>endereço (rede)</th><th>data</th><th>ação</th></tr></thead><tbody id="withdrawals"></tbody></table>
+          <div class="muted" style="margin-top:8px">O cliente pediu o saque e o USDT já está <b>retido</b>. Envie o USDT para o endereço e clique em <b>Concluir</b> (vai pedir o hash da tx — opcional). <b>Rejeitar</b> devolve o USDT ao cliente. Não precisa copiar código nenhum.</div>
         </div>
       </div>
 
@@ -177,6 +177,19 @@ async function api(method, path, body) {
 function toast(msg, isErr) {
   const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (isErr?' err':'');
   setTimeout(() => t.className = 'toast', 2600);
+}
+// USDT withdrawal row actions — the operator clicks these; the FULL id is passed
+// automatically so nobody has to copy/paste a code.
+async function wdComplete(id) {
+  const tx = window.prompt('Você já enviou o USDT? Cole o hash da transação (tx) — pode deixar em branco:', '');
+  if (tx === null) return; // cancelled
+  try { await api('POST', '/withdrawals/'+id+'/complete', tx.trim() ? { providerRef: tx.trim() } : {}); toast('✓ Saque concluído — USDT enviado'); refresh(); }
+  catch (e) { toast(e.message, true); }
+}
+async function wdReject(id) {
+  if (!window.confirm('Rejeitar este saque e devolver o USDT ao cliente?')) return;
+  try { await api('POST', '/withdrawals/'+id+'/reject', {}); toast('✓ Saque rejeitado — USDT devolvido ao cliente'); refresh(); }
+  catch (e) { toast(e.message, true); }
 }
 const chipFor = (t) => ({transfer:'blue',payout:'em',cash_in:'em',cash_out:'amber',fund_wallet:'gray',float_topup:'gray'}[t] || 'gray');
 const kycChip = (s) => ({approved:'em',pending:'amber',review:'gold',rejected:'red'}[s] || 'gray');
@@ -276,11 +289,14 @@ async function refresh() {
     try {
       const ws = await api('GET','/withdrawals');
       $('withdrawals').innerHTML = (ws||[]).map(w => `<tr>
-        <td class="mono" style="font-size:9px" title="${w.id}">${String(w.id).slice(0,8)}</td>
-        <td class="muted">${w.customerId}</td>
+        <td class="muted" title="${w.id}">${w.customerId}</td>
         <td class="num">${fmt(w.amountMinor,'USDT')}</td>
         <td class="mono" style="font-size:10px">${w.address} <span class="muted">(${w.network})</span></td>
-        <td class="muted" style="font-size:9px">${new Date(w.createdAt).toLocaleString()}</td></tr>`).join('') || '<tr><td colspan=5 class="muted">nenhum saque pendente</td></tr>';
+        <td class="muted" style="font-size:9px">${new Date(w.createdAt).toLocaleString()}</td>
+        <td style="white-space:nowrap">
+          <button onclick="wdComplete('${w.id}')" style="background:var(--emerald);color:#04160e;border:0;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">Concluir</button>
+          <button onclick="wdReject('${w.id}')" style="background:transparent;color:var(--red);border:1px solid var(--red);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-left:4px">Rejeitar</button>
+        </td></tr>`).join('') || '<tr><td colspan=5 class="muted">nenhum saque pendente</td></tr>';
     } catch (_) { /* withdrawals not wired */ }
   } catch (e) {
     $('health').textContent = '● offline'; $('health').style.color = 'var(--red)';
@@ -298,8 +314,6 @@ const FORMS = {
   'Comissão do agente': { fields:[['externalId','agente'],['commission','comissão % (ex: 0,75)']], run:(v)=>{ const bps = pctToBps(v.commission); if (bps > 1000) throw new Error('Comissão máxima é 10%'); return api('POST',`/agents/${v.externalId}/commission`,{commissionBps: bps}); } },
   'Ativar login do agente': { fields:[['externalId','agente (id)'],['phone','telefone do agente (+55...)']], run: async (v)=>{ const r = await api('POST',`/agents/${v.externalId}/app-login`,{phone:v.phone}); toast('✓ Login ativado — o agente entra no app com '+v.phone+' (código por SMS)'); return r; } },
   'Taxa do USDT (P2P)': { fields:[['pct','taxa em % (ex: 2 = 2%)']], run: async (v)=>{ if (v.pct==null || String(v.pct).trim()==='') throw new Error('Digite a taxa em %, por ex: 2'); const bps = pctToBps(v.pct); if (bps < 0 || bps > 2000) throw new Error('A taxa deve ser entre 0% e 20%'); const r = await api('POST','/p2p/commission',{bps}); toast('✓ Taxa do USDT agora é '+(r.commissionBps/100)+'%'); return r; } },
-  'Concluir saque USDT': { fields:[['id','id do saque'],['providerRef','hash da transação (tx) — opcional']], run: async (v)=>{ const r = await api('POST',`/withdrawals/${v.id}/complete`, v.providerRef?{providerRef:v.providerRef}:{}); toast('✓ Saque concluído — USDT enviado'); return r; } },
-  'Rejeitar saque USDT': { fields:[['id','id do saque']], run: async (v)=>{ const r = await api('POST',`/withdrawals/${v.id}/reject`,{}); toast('✓ Saque rejeitado — USDT devolvido ao cliente'); return r; } },
   'Enviar aviso a todos (notificação)': { fields:[['title','título (ex: Manutenção)'],['body','mensagem para os usuários']], run: async (v)=>{ if(!String(v.title||'').trim()) throw new Error('Digite o título'); if(!String(v.body||'').trim()) throw new Error('Digite a mensagem'); const r = await api('POST','/notifications/broadcast',{title:String(v.title).trim(),body:String(v.body).trim()}); toast('✓ Aviso enviado para '+(r.recipients||0)+' aparelho(s)'); return r; } },
   'Depositar USDT (merchant)': { fields:[['customerId','merchant (id)'],['amount','USDT (ex: 100)']], run:(v)=>api('POST','/transactions/fund-wallet',{customerId:v.customerId,currency:'USDT',amount:v.amount,idempotencyKey:idem()}) },
   'Resolver ordem P2P': { fields:[['orderId','id da ordem'],['action','release ou cancel']], run: async (v)=>{ const r = await api('POST',`/p2p/orders/${v.orderId}/resolve`,{action:v.action}); toast('✓ Ordem '+r.status); return r; } },
