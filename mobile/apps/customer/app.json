@@ -14,6 +14,7 @@
     },
     "android": {
       "package": "com.ticashpay.customer",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#0B1F3A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -21,7 +22,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "output": "static",
@@ -44,6 +45,12 @@
         "expo-image-picker",
         {
           "photosPermission": "O Ticash usa suas fotos para você anexar o comprovante de pagamento."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0E8F60"
         }
       ]
     ],

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "900123622951",
+    "project_id": "ticash-pay",
+    "storage_bucket": "ticash-pay.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:900123622951:android:0a706baf218f479a441802",
+        "android_client_info": {
+          "package_name": "com.ticashpay.customer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8cALZxKBO2tT8aVj_2SbqxDlmRm2lnbQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
