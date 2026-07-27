@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { assertCurrency, Currency } from '../money/currency';
 import { toMinor } from '../money/money';
 import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
+import { LedgerError } from '../ledger/engine';
 import { RegistryError } from '../registry/store';
 import type { ServerDeps } from './server';
 
@@ -10,8 +11,21 @@ const currencySchema = z.string().transform((v) => assertCurrency(v));
 const amountSchema = z.union([z.string(), z.number()]); // decimal major units, parsed exactly
 const kycStatusSchema = z.enum(['pending', 'approved', 'rejected', 'review']);
 
+// A MONEY MOVEMENT (what actually hits the ledger) must be strictly positive — a
+// negative amount would invert the flow (mint/steal), zero is never a movement.
 function money(amount: string | number, currency: Currency): bigint {
-  return toMinor(amount, currency);
+  const minor = toMinor(amount, currency);
+  if (minor <= 0n) throw new LedgerError('amount must be greater than zero', 'VALIDATION');
+  return minor;
+}
+
+// A NON-MOVEMENT amount (a fee, a limit, a reported total) must be >= 0: zero is a
+// legitimate value (a zero fee, "no minimum") but negative never is. Any stricter,
+// field-specific rule (e.g. a max must be > 0) is applied by the domain layer.
+function nonNegativeMoney(amount: string | number, currency: Currency): bigint {
+  const minor = toMinor(amount, currency);
+  if (minor < 0n) throw new LedgerError('amount cannot be negative', 'VALIDATION');
+  return minor;
 }
 
 export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
@@ -46,7 +60,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     reply.status(201);
     return registry.createAgent({
       externalId: b.externalId,
-      ...(b.floatLimit !== undefined ? { floatLimitMinor: money(b.floatLimit, 'BRL') } : {}),
+      ...(b.floatLimit !== undefined ? { floatLimitMinor: nonNegativeMoney(b.floatLimit, 'BRL') } : {}),
       ...(b.commissionBps !== undefined ? { commissionBps: b.commissionBps } : {}),
     });
   });
@@ -120,14 +134,14 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     if (deps.kyc) await deps.kyc.limits.assertWithinLimit(b.senderId, money(b.sendAmount, b.fromCurrency), b.fromCurrency);
     // `rate` and `feeAmount` are optional: when omitted, the corridor config supplies
     // the locked rate (FX margin) and the platform fee (WS-6/WS-7).
-    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), ...(b.feeAmount !== undefined ? { feeMinor: money(b.feeAmount, b.fromCurrency) } : {}), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
+    const transferArgs = { senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), ...(b.feeAmount !== undefined ? { feeMinor: nonNegativeMoney(b.feeAmount, b.fromCurrency) } : {}), ...(b.rate ? { rate: b.rate } : {}), idempotencyKey: b.idempotencyKey };
     // Crash-safe saga (persists intent, resumable, creates the payout). Falls back to a
     // direct ledger transfer when no saga is wired (e.g. lightweight test servers).
     if (deps.transfers) {
       return deps.transfers.service.initiate(transferArgs);
     }
     if (!b.rate || b.feeAmount === undefined) throw new RegistryError('rate and fee are required (no FX service in this context)', 'VALIDATION');
-    const result = await ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: money(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
+    const result = await ledger.initiateTransfer({ senderId: b.senderId, recipientRef: b.recipientRef, fromCurrency: b.fromCurrency, toCurrency: b.toCurrency, sendMinor: money(b.sendAmount, b.fromCurrency), feeMinor: nonNegativeMoney(b.feeAmount, b.fromCurrency), rate: b.rate, idempotencyKey: b.idempotencyKey });
     if (deps.payouts) {
       await deps.payouts.service.createForTransfer({ correlationId: result.correlationId, recipientRef: b.recipientRef, quote: result.quote, senderId: b.senderId });
     }
@@ -161,7 +175,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     // Match our recorded fee for a provider/currency against the rail's reported total.
     app.post('/reconciliation/provider-fees/match', async (req) => {
       const b = z.object({ provider: z.string().min(1), currency: currencySchema, reportedAmount: amountSchema }).parse(req.body);
-      return recon.match(b.provider, b.currency, money(b.reportedAmount, b.currency));
+      return recon.match(b.provider, b.currency, nonNegativeMoney(b.reportedAmount, b.currency));
     });
   }
 
@@ -304,7 +318,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     app.get('/fx/quote', async (req) => {
       const q = z.object({ from: currencySchema, to: currencySchema, amount: amountSchema.optional() }).parse(req.query);
       if (q.amount === undefined) return fx.quote(q.from, q.to);
-      return fx.priceTransfer(q.from, q.to, money(q.amount, q.from));
+      return fx.priceTransfer(q.from, q.to, nonNegativeMoney(q.amount, q.from));
     });
     app.get('/fx/rates', async () => fx.list());
     // Admin: set/update a pair's mid rate + margin + platform fee + provider fee.

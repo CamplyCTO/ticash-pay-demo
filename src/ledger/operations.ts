@@ -1,5 +1,6 @@
 import { Currency } from '../money/currency';
 import { convert } from '../money/money';
+import { LedgerError } from './engine';
 import { AccountSpec, JournalDraft, PostingDraft } from './types';
 
 /**
@@ -30,10 +31,29 @@ export function p2pEscrow(merchantId: string, currency: Currency): AccountSpec {
   return { ownerType: 'customer', ownerId: merchantId, kind: 'p2p_escrow', currency };
 }
 
+/**
+ * Every posting is built through credit()/debit() with a POSITIVE magnitude — the
+ * direction of the money is chosen by which helper you call, NEVER by the sign of
+ * the amount. A non-positive magnitude here means a caller passed a negative (or
+ * zero) business amount (e.g. a "-100" transfer or agent cash-in). That would
+ * silently INVERT the flow — crediting a wallet out of nothing, or draining a
+ * victim — while the journal still nets to zero and reconciliation still reports
+ * Σ=0. Rejecting it at this single chokepoint kills the whole class: no operation
+ * builder can express a sign-flip, regardless of which route reached it. (Defense
+ * in depth: the API edge also rejects non-positive amounts, and the engine still
+ * forbids zero-amount postings + unbalanced journals.)
+ */
+function assertPositiveMagnitude(amountMinor: bigint): void {
+  if (amountMinor <= 0n) {
+    throw new LedgerError(`amount must be positive (got ${amountMinor})`, 'VALIDATION');
+  }
+}
 function credit(account: AccountSpec, amountMinor: bigint): PostingDraft {
+  assertPositiveMagnitude(amountMinor);
   return { account, currency: account.currency, amountMinor };
 }
 function debit(account: AccountSpec, amountMinor: bigint): PostingDraft {
+  assertPositiveMagnitude(amountMinor);
   return { account, currency: account.currency, amountMinor: -amountMinor };
 }
 

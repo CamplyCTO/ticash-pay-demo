@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { assertCurrency, CURRENCIES, Currency } from '../money/currency';
 import { toMinor } from '../money/money';
+import { LedgerError } from '../ledger/engine';
 import { customerWallet, agentFloat, agentCommission } from '../ledger/operations';
 import { applyBps } from '../fx/rate-service';
 import { RegistryError } from '../registry/store';
@@ -11,7 +12,23 @@ import type { ServerDeps } from './server';
 
 const currencySchema = z.string().transform((v) => assertCurrency(v));
 const amountSchema = z.union([z.string(), z.number()]);
-const money = (amount: string | number, currency: Currency): bigint => toMinor(amount, currency);
+// Parse a user-supplied amount to minor units AND reject non-positive values. A
+// negative amount would invert the money flow at the ledger (mint/steal); zero is
+// never a valid money movement. This is the API-edge half of the whole-class guard
+// (the ledger's credit()/debit() reject it again as defense in depth).
+const money = (amount: string | number, currency: Currency): bigint => {
+  const minor = toMinor(amount, currency);
+  if (minor <= 0n) throw new LedgerError('amount must be greater than zero', 'VALIDATION');
+  return minor;
+};
+// A NON-MOVEMENT amount (a per-order limit, a preview amount) must be >= 0: zero is
+// legitimate ("no minimum"), negative never is. Field-specific rules (e.g. a max
+// must be > 0) are applied by the domain layer.
+const nonNegativeMoney = (amount: string | number, currency: Currency): bigint => {
+  const minor = toMinor(amount, currency);
+  if (minor < 0n) throw new LedgerError('amount cannot be negative', 'VALIDATION');
+  return minor;
+};
 
 /** The authenticated caller, attached by the /app/* JWT boundary (see server.ts). */
 export interface AppUserContext {
@@ -138,7 +155,7 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     app.get('/app/fx/quote', async (req) => {
       const q = z.object({ from: currencySchema, to: currencySchema, amount: amountSchema.optional() }).parse(req.query);
       if (q.amount === undefined) return fx.quote(q.from, q.to);
-      return fx.priceTransfer(q.from, q.to, money(q.amount, q.from));
+      return fx.priceTransfer(q.from, q.to, nonNegativeMoney(q.amount, q.from));
     });
   }
 
@@ -379,8 +396,8 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         fiatCurrency: b.fiatCurrency,
         pricePerUnit: b.pricePerUnit,
         totalMinor: money(b.amount, 'USDT'),
-        minFiatMinor: b.minAmount !== undefined ? money(b.minAmount, b.fiatCurrency) : null,
-        maxFiatMinor: b.maxAmount !== undefined ? money(b.maxAmount, b.fiatCurrency) : null,
+        minFiatMinor: b.minAmount !== undefined ? nonNegativeMoney(b.minAmount, b.fiatCurrency) : null,
+        maxFiatMinor: b.maxAmount !== undefined ? nonNegativeMoney(b.maxAmount, b.fiatCurrency) : null,
         ...(b.payWindowMin !== undefined ? { payWindowMin: b.payWindowMin } : {}),
         methods: b.methods,
       });
