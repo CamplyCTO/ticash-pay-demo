@@ -458,7 +458,7 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       const me = await requireCustomer(req);
       const p = z.object({ id: z.string().min(1) }).parse(req.params);
       const b = z.object({ reason: z.string().min(1).max(500) }).parse(req.body);
-      return p2p.disputeOrder({ orderId: p.id, buyerId: me.externalId, reason: b.reason });
+      return p2p.disputeOrder({ orderId: p.id, byId: me.externalId, reason: b.reason });
     });
   }
 

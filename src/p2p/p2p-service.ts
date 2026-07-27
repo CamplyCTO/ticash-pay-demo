@@ -187,10 +187,10 @@ export class P2PService {
     return updated;
   }
 
-  /** Buyer disputes an unconfirmed order (paid but not released) → goes to admin. */
-  async disputeOrder(args: { orderId: string; buyerId: string; reason: string }): Promise<Order> {
+  /** Buyer OR seller flags a paid-but-unresolved order → goes to admin to decide. */
+  async disputeOrder(args: { orderId: string; byId: string; reason: string }): Promise<Order> {
     const order = await this.requireOrder(args.orderId);
-    if (order.buyerId !== args.buyerId) throw new P2PError('not your order', 'FORBIDDEN');
+    if (order.buyerId !== args.byId && order.merchantId !== args.byId) throw new P2PError('not your order', 'FORBIDDEN');
     const updated = await this.store.casUpdate(order.id, ['payment_submitted'], { status: 'disputed', disputeReason: args.reason });
     if (!updated) throw new P2PError(`order is ${order.status}, cannot dispute`, 'CONFLICT');
     return updated;
@@ -205,14 +205,23 @@ export class P2PService {
     return this.doRelease(order, ['payment_submitted']);
   }
 
-  /** Seller or buyer cancels. Buyer only before paying; seller may reject a claimed payment. */
+  /**
+   * Cancel an order that is still UNPAID (status 'created'). Either party may cancel
+   * before the buyer reports payment.
+   *
+   * CRITICAL: once the buyer has reported payment (payment_submitted), NOBODY can
+   * unilaterally cancel — otherwise a malicious seller could take the buyer's fiat
+   * payment AND reclaim the escrowed USDT ("reject after paid" scam). After payment
+   * the only paths are: seller RELEASES, or either party opens a DISPUTE that the
+   * admin resolves (release to buyer / cancel back to seller after checking proof).
+   */
   async cancelOrder(args: { orderId: string; byId: string; role: 'customer' }): Promise<Order> {
     const order = await this.requireOrder(args.orderId);
     const isBuyer = order.buyerId === args.byId;
     const isMerchant = order.merchantId === args.byId;
     if (!isBuyer && !isMerchant) throw new P2PError('not your order', 'FORBIDDEN');
-    if (isBuyer && !isMerchant && order.status !== 'created') {
-      throw new P2PError('you already reported payment; open a dispute instead of cancelling', 'CONFLICT');
+    if (order.status !== 'created') {
+      throw new P2PError('payment already reported — release the USDT or open a dispute', 'CONFLICT');
     }
     return this.store.cancelOrder(order.id); // atomically restores the reservation
   }

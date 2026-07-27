@@ -142,6 +142,24 @@ describe('P2P USDT escrow marketplace (WS-4)', () => {
     expect((await post(`/app/p2p/orders/${order.id}/cancel`, {}, { authorization: buyer.token })).statusCode).toBe(409);
   });
 
+  it('SECURITY: a seller CANNOT cancel after the buyer paid (no reject-and-reclaim); only release or dispute', async () => {
+    const seller = await loginCustomer('+5511900000055');
+    const buyer = await loginCustomer('+5511900000056');
+    await fundUSDT(seller.ext, '10.000000');
+    const offerId = (await listOffer(seller, '10.000000')).json().id;
+    const order = (await post('/app/p2p/orders', { offerId, amount: '5.000000' }, { authorization: buyer.token })).json();
+    await post(`/app/p2p/orders/${order.id}/pay`, { proofRef: 'p' }, { authorization: buyer.token });
+    // The scam: seller sees the fiat land, hits reject to reclaim the USDT AND keep the fiat.
+    // Must be BLOCKED now — the paid order can't be unilaterally cancelled by anyone.
+    expect((await post(`/app/p2p/orders/${order.id}/cancel`, {}, { authorization: seller.token })).statusCode).toBe(409);
+    // The escrow is untouched; the ledger stays balanced (nothing was restored to the seller).
+    expect((await get('/reconciliation')).json().balanced).toBe(true);
+    // The seller's safe recourse is a dispute → the admin decides.
+    const disp = await post(`/app/p2p/orders/${order.id}/dispute`, { reason: 'payment not received' }, { authorization: seller.token });
+    expect(disp.statusCode).toBe(200);
+    expect(disp.json().status).toBe('disputed');
+  });
+
   it('dispute → admin releases the USDT to the buyer', async () => {
     const seller = await loginCustomer('+5511900000060');
     const buyer = await loginCustomer('+5511900000061');

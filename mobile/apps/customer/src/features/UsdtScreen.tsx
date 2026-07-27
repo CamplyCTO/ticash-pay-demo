@@ -290,11 +290,11 @@ function SellerOrders() {
   const { t: tr } = useI18n();
   const orders = useP2POrders('seller');
   const release = useReleaseP2POrder();
-  const cancel = useCancelP2POrder();
+  const dispute = useDisputeP2POrder();
   if (orders.isLoading) return <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>;
   const rows = orders.data ?? [];
   if (!rows.length) return <EmptyState title="Nenhuma venda ainda" icon={<Ionicons name="cash-outline" size={26} color={t.colors.primary} />} />;
-  const busy = release.isPending || cancel.isPending;
+  const busy = release.isPending || dispute.isPending;
   return (
     <View style={{ gap: t.spacing(3) }}>
       {rows.map((o) => (
@@ -313,10 +313,11 @@ function SellerOrders() {
                 </View>
               ) : null}
               <ProofImage orderId={o.id} />
-              <Row gap={3}>
-                <Button variant="secondary" title="Rejeitar" style={{ flex: 1 }} disabled={busy} onPress={() => cancel.mutate(o.id, { onSuccess: () => toast.success('Ordem rejeitada'), onError: (e) => toast.error(messageForError(e, tr)) })} />
-                <Button title="Liberar USDT" style={{ flex: 1 }} loading={release.isPending} disabled={busy} onPress={() => release.mutate(o.id, { onSuccess: () => toast.success('USDT liberado ao comprador'), onError: (e) => toast.error(messageForError(e, tr)) })} />
-              </Row>
+              <Button title="Liberar USDT" loading={release.isPending} disabled={busy} onPress={() => release.mutate(o.id, { onSuccess: () => toast.success('USDT liberado ao comprador'), onError: (e) => toast.error(messageForError(e, tr)) })} />
+              {/* No "reject" once the buyer has paid: cancelling would restore the USDT to
+                  the seller while they keep the buyer's payment. If something is wrong the
+                  seller opens a dispute and the central (admin) decides. */}
+              <Button variant="ghost" title="Tem um problema? Abrir disputa" disabled={busy} onPress={() => dispute.mutate({ id: o.id, reason: 'Vendedor: pagamento não confere / não recebi' }, { onSuccess: () => toast.success('Disputa aberta — a central vai analisar'), onError: (e) => toast.error(messageForError(e, tr)) })} />
             </>
           ) : null}
         </Card>
