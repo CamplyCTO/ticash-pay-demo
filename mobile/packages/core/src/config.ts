@@ -23,3 +23,13 @@ export const FEATURE_USDT: boolean =
  */
 export const FEATURE_AIRTIME: boolean =
   typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_FEATURE_AIRTIME === '1';
+
+/**
+ * Web cookie session (pairs with the backend WS-2 cookie session). When on (web only),
+ * the refresh token lives in the httpOnly cookie the backend sets — NOT in localStorage
+ * (XSS-safe) — and the session is shared with the app subdomains. Off by default: web
+ * uses the bearer/localStorage flow. Enable with EXPO_PUBLIC_COOKIE_SESSION=1 once the
+ * backend has WEB_COOKIE_SESSION=1 + a same-site domain.
+ */
+export const COOKIE_SESSION: boolean =
+  typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_COOKIE_SESSION === '1';

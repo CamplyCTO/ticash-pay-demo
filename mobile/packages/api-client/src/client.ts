@@ -25,6 +25,18 @@ export interface TicashApiOptions {
   baseUrl: string;
   /** Returns the current access token (or null), injected by the auth store. */
   getAccessToken?: () => string | null;
+  /**
+   * Called ONCE (single-flight) when an authenticated request gets a 401. Should
+   * refresh the session and return true on success (access token now updated via
+   * getAccessToken), false otherwise. On true the original request is replayed once.
+   * Injected by the auth store; keeps the client framework-agnostic.
+   */
+  onUnauthorized?: () => Promise<boolean>;
+  /** Send credentials (cookies) with requests — used by the web httpOnly-cookie session. */
+  withCredentials?: boolean;
+  /** Returns the readable double-submit CSRF token (web reads it from document.cookie),
+   *  echoed in the x-ticash-csrf header so a cookie-based refresh passes the CSRF check. */
+  getCsrfToken?: () => string | null;
   fetchImpl?: typeof fetch;
 }
 
@@ -32,11 +44,19 @@ export interface TicashApiOptions {
 export class TicashApi {
   private readonly baseUrl: string;
   private readonly getAccessToken: () => string | null;
+  private readonly onUnauthorized?: () => Promise<boolean>;
+  private readonly withCredentials: boolean;
+  private readonly getCsrfToken?: () => string | null;
   private readonly fetchImpl: typeof fetch;
+  /** Shared in-flight refresh so N concurrent 401s trigger only ONE refresh. */
+  private refreshInFlight: Promise<boolean> | null = null;
 
   constructor(opts: TicashApiOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.getAccessToken = opts.getAccessToken ?? (() => null);
+    this.onUnauthorized = opts.onUnauthorized;
+    this.withCredentials = opts.withCredentials ?? false;
+    this.getCsrfToken = opts.getCsrfToken;
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
@@ -63,11 +83,13 @@ export class TicashApi {
   resetPassword(phone: string, code: string, newPassword: string, device?: string): Promise<AuthTokens> {
     return this.request('POST', '/app/auth/password/reset', { body: device ? { phone, code, newPassword, device } : { phone, code, newPassword } });
   }
-  refresh(refreshToken: string): Promise<AuthTokens> {
-    return this.request('POST', '/app/auth/refresh', { body: { refreshToken } });
+  // refreshToken is optional: the web cookie session provides it via the httpOnly
+  // cookie (+ the x-ticash-csrf header); native passes the stored token in the body.
+  refresh(refreshToken?: string): Promise<AuthTokens> {
+    return this.request('POST', '/app/auth/refresh', { body: refreshToken ? { refreshToken } : {} });
   }
-  logout(refreshToken: string): Promise<{ ok: true }> {
-    return this.request('POST', '/app/auth/logout', { body: { refreshToken } });
+  logout(refreshToken?: string): Promise<{ ok: true }> {
+    return this.request('POST', '/app/auth/logout', { body: refreshToken ? { refreshToken } : {} });
   }
 
   // ---- authenticated ----
@@ -212,11 +234,28 @@ export class TicashApi {
     return this.request('POST', '/app/airtime/topup', { auth: true, body: input });
   }
 
-  private async request<T>(method: string, path: string, opts: { body?: unknown; auth?: boolean } = {}): Promise<T> {
+  /** Run the injected refresh, sharing one in-flight promise across concurrent 401s. */
+  private runRefresh(): Promise<boolean> {
+    if (!this.onUnauthorized) return Promise.resolve(false);
+    if (!this.refreshInFlight) {
+      this.refreshInFlight = Promise.resolve()
+        .then(() => this.onUnauthorized!())
+        .catch(() => false)
+        .finally(() => { this.refreshInFlight = null; });
+    }
+    return this.refreshInFlight;
+  }
+
+  private async request<T>(method: string, path: string, opts: { body?: unknown; auth?: boolean; retried?: boolean } = {}): Promise<T> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (opts.auth) {
       const token = this.getAccessToken();
       if (token) headers.authorization = `Bearer ${token}`;
+    }
+    // Double-submit CSRF token for the cookie session (web). Harmless elsewhere.
+    if (this.withCredentials) {
+      const csrf = this.getCsrfToken?.();
+      if (csrf) headers['x-ticash-csrf'] = csrf;
     }
     let res: Response;
     try {
@@ -224,9 +263,17 @@ export class TicashApi {
         method,
         headers,
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        ...(this.withCredentials ? { credentials: 'include' as RequestCredentials } : {}),
       });
     } catch (e) {
       throw new ApiError(0, 'NETWORK', e instanceof Error ? e.message : 'network error');
+    }
+    // Silent refresh: a 401 on an authenticated request triggers ONE refresh (shared
+    // across concurrent 401s); on success the original request is replayed exactly once.
+    // The refresh call itself is unauthenticated, so it can't recurse here.
+    if (res.status === 401 && opts.auth && !opts.retried && this.onUnauthorized) {
+      const refreshed = await this.runRefresh();
+      if (refreshed) return this.request<T>(method, path, { ...opts, retried: true });
     }
     const text = await res.text();
     const data = text ? safeJson(text) : {};

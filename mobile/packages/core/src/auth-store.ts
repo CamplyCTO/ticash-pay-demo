@@ -1,7 +1,12 @@
+import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { ApiError, type AuthTokens, type PublicUser } from '@ticash/api-client';
-import { api, setTokenGetter } from './client';
+import { api, setTokenGetter, setUnauthorizedHandler } from './client';
+import { COOKIE_SESSION } from './config';
 import { secureStorage, STORAGE_KEYS } from './storage';
+
+/** Web cookie session: the refresh token lives in the httpOnly cookie, not JS storage. */
+const webCookieSession = Platform.OS === 'web' && COOKIE_SESSION;
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
@@ -36,17 +41,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
 
   bootstrap: async () => {
-    const rt = await secureStorage.get(STORAGE_KEYS.refreshToken);
-    if (!rt) {
+    // Native/bearer reads the stored token; the web cookie session provides it via
+    // the httpOnly cookie (api.refresh() with no argument).
+    const rt = webCookieSession ? null : await secureStorage.get(STORAGE_KEYS.refreshToken);
+    if (!rt && !webCookieSession) {
       set({ status: 'unauthenticated' });
       return;
     }
     try {
-      const tokens = await api.refresh(rt);
+      const tokens = rt ? await api.refresh(rt) : await api.refresh();
       await applyTokens(set, tokens);
       set({ status: 'authenticated' });
     } catch {
-      await secureStorage.remove(STORAGE_KEYS.refreshToken);
+      if (rt) await secureStorage.remove(STORAGE_KEYS.refreshToken);
       set({ status: 'unauthenticated', accessToken: null, refreshToken: null, user: null });
     }
   },
@@ -96,9 +103,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refresh: async () => {
     const rt = get().refreshToken;
-    if (!rt) return false;
+    if (!rt && !webCookieSession) return false;
     try {
-      const tokens = await api.refresh(rt);
+      const tokens = rt ? await api.refresh(rt) : await api.refresh();
       await applyTokens(set, tokens);
       return true;
     } catch {
@@ -109,18 +116,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     const rt = get().refreshToken;
-    if (rt) {
-      try { await api.logout(rt); } catch { /* best effort */ }
-    }
+    // Body token (native) or the cookie (web) — both revoke server-side + clear the cookie.
+    try { await api.logout(rt ?? undefined); } catch { /* best effort */ }
     await secureStorage.remove(STORAGE_KEYS.refreshToken);
     set({ status: 'unauthenticated', accessToken: null, refreshToken: null, user: null });
   },
 }));
 
 async function applyTokens(set: (partial: Partial<AuthState>) => void, tokens: AuthTokens): Promise<void> {
+  if (webCookieSession) {
+    // Cookie mode: the refresh token lives ONLY in the httpOnly cookie — never in JS
+    // (neither localStorage NOR the in-memory store), so XSS can't exfiltrate it.
+    set({ accessToken: tokens.accessToken, refreshToken: null, user: tokens.user });
+    return;
+  }
   await secureStorage.set(STORAGE_KEYS.refreshToken, tokens.refreshToken);
   set({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, user: tokens.user });
 }
 
 // Wire the API client's access-token getter to this store.
 setTokenGetter(() => useAuthStore.getState().accessToken);
+// Wire the client's 401 → silent-refresh handler. `refresh()` updates the access
+// token on success (the request is then replayed) and signs out on failure.
+setUnauthorizedHandler(() => useAuthStore.getState().refresh());
