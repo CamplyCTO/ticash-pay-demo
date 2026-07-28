@@ -31,5 +31,17 @@ export const FEATURE_AIRTIME: boolean =
  * uses the bearer/localStorage flow. Enable with EXPO_PUBLIC_COOKIE_SESSION=1 once the
  * backend has WEB_COOKIE_SESSION=1 + a same-site domain.
  */
-export const COOKIE_SESSION: boolean =
-  typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_COOKIE_SESSION === '1';
+function detectCookieSession(): boolean {
+  const flag = typeof process !== 'undefined' ? process.env?.EXPO_PUBLIC_COOKIE_SESSION : undefined;
+  if (flag === '1') return true;
+  if (flag === '0') return false;
+  // Default: a web app served from a real (non-localhost) host uses the cookie session
+  // — that's the production topology (same-site subdomains). Robust even if the
+  // EXPO_PUBLIC_COOKIE_SESSION build var doesn't inline (Metro workspace-package quirk).
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const h = window.location.hostname;
+    return h !== 'localhost' && h !== '127.0.0.1' && !h.endsWith('.local');
+  }
+  return false;
+}
+export const COOKIE_SESSION: boolean = detectCookieSession();

@@ -57,7 +57,9 @@ export class TicashApi {
     this.onUnauthorized = opts.onUnauthorized;
     this.withCredentials = opts.withCredentials ?? false;
     this.getCsrfToken = opts.getCsrfToken;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    // Wrap the global fetch so it isn't invoked with the TicashApi instance as `this`
+    // — browsers throw "Failed to execute 'fetch' on 'Window': Illegal invocation".
+    this.fetchImpl = opts.fetchImpl ?? ((input, init) => fetch(input, init));
   }
 
   // ---- auth (public) ----

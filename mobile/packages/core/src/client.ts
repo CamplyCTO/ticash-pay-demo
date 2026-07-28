@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { TicashApi } from '@ticash/api-client';
-import { API_BASE_URL, COOKIE_SESSION } from './config';
+import { API_BASE_URL } from './config';
 
 const isWeb = Platform.OS === 'web';
 /** Read the readable double-submit CSRF token the backend set (web cookie session). */
@@ -28,7 +28,7 @@ export const api = new TicashApi({
   baseUrl: API_BASE_URL,
   getAccessToken: () => tokenGetter(),
   onUnauthorized: () => unauthorizedHandler(),
-  // Web cookie session: send the session cookie + echo the CSRF token on refresh.
-  withCredentials: isWeb && COOKIE_SESSION,
+  // Web uses the cookie session: send the session cookie + echo the CSRF token on refresh.
+  withCredentials: isWeb,
   getCsrfToken: readCsrfCookie,
 });

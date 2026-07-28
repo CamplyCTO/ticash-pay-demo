@@ -2,11 +2,12 @@ import { Platform } from 'react-native';
 import { create } from 'zustand';
 import { ApiError, type AuthTokens, type PublicUser } from '@ticash/api-client';
 import { api, setTokenGetter, setUnauthorizedHandler } from './client';
-import { COOKIE_SESSION } from './config';
 import { secureStorage, STORAGE_KEYS } from './storage';
 
-/** Web cookie session: the refresh token lives in the httpOnly cookie, not JS storage. */
-const webCookieSession = Platform.OS === 'web' && COOKIE_SESSION;
+/** The web app uses the httpOnly-cookie session (the refresh token never touches JS);
+ *  native uses the bearer/SecureStore flow. Keyed purely on the platform so it can't be
+ *  affected by build-env/prerender quirks. */
+const webCookieSession = Platform.OS === 'web';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
