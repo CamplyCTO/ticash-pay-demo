@@ -54,6 +54,7 @@ export const en = {
     floatBalance: 'Float balance', commissions: 'Commissions', customers: 'Customers', empty: 'No operations yet',
     lookupPhone: 'Customer phone', findCustomer: 'Find customer', amount: 'Amount', confirm: 'Confirm',
     done: 'Done!', noCustomer: 'No customer with that phone', earned: 'Earned',
+    onboardingTitle: 'Serve your community', onboardingSubtitle: 'Cash in and out, manage your float, and earn commission on every operation.',
   },
   send: {
     title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient number',
@@ -142,6 +143,7 @@ export const pt: Dictionary = {
     floatBalance: 'Saldo de caixa', commissions: 'Comissões', customers: 'Clientes', empty: 'Nenhuma operação ainda',
     lookupPhone: 'Telefone do cliente', findCustomer: 'Buscar cliente', amount: 'Valor', confirm: 'Confirmar',
     done: 'Pronto!', noCustomer: 'Nenhum cliente com esse telefone', earned: 'Ganho',
+    onboardingTitle: 'Atenda sua comunidade', onboardingSubtitle: 'Faça cash-in e cash-out, gerencie seu caixa e ganhe comissão em cada operação.',
   },
   send: {
     title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Número do destinatário',
@@ -225,6 +227,7 @@ export const fr: Dictionary = {
     floatBalance: 'Solde de caisse', commissions: 'Commissions', customers: 'Clients', empty: 'Aucune opération' ,
     lookupPhone: 'Téléphone du client', findCustomer: 'Trouver le client', amount: 'Montant', confirm: 'Confirmer',
     done: 'Terminé !', noCustomer: 'Aucun client avec ce numéro', earned: 'Gagné',
+    onboardingTitle: 'Servez votre communauté', onboardingSubtitle: 'Encaissez et décaissez, gérez votre caisse et gagnez des commissions à chaque opération.',
   },
   send: {
     title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Numéro du destinataire',

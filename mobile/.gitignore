@@ -3,7 +3,7 @@ node_modules/
 dist/
 dist-web/
 web-build/
-screens/
+/screens/
 *.log
 .DS_Store
 *.tsbuildinfo
