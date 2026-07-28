@@ -158,6 +158,27 @@ export const config = {
       },
     },
   },
+  /** Web apps (customer + agent) allowed to call the API from a browser (CORS).
+   *  CSV of EXACT origins (scheme+host+port), e.g.
+   *  "https://app.ticashpay.com,https://agent.ticashpay.com,https://ticashpay.com".
+   *  Empty = no browser origin allowed (the current behaviour; native apps + curl
+   *  send no Origin and are unaffected). Credentials are enabled for these origins,
+   *  so this is an explicit allowlist — never '*'. */
+  web: {
+    allowedOrigins: (process.env.WEB_ALLOWED_ORIGINS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    /** Cookie session for the browser apps (WS-2). When on, verify/login/reset/refresh
+     *  set an httpOnly refresh cookie so the session is shared with the app subdomains
+     *  under `cookieDomain` (e.g. ".ticashpay.com") — never readable by JS (XSS-safe).
+     *  Off by default: the token-in-body flow (mobile) is unchanged. Requires the
+     *  same-site subdomain topology + a CSRF check before enabling in production. */
+    cookieSession: process.env.WEB_COOKIE_SESSION === '1',
+    cookieDomain: process.env.WEB_COOKIE_DOMAIN ?? '', // "" = host-only cookie
+    /** Set Secure on the cookie (HTTPS-only). Default on; set WEB_COOKIE_INSECURE=1 for local http dev. */
+    cookieSecure: process.env.WEB_COOKIE_INSECURE !== '1',
+  },
   /** End-user auth for the mobile apps (Phase 3 WS-0). Always on; OTP sender is pluggable. */
   auth: {
     jwtSecret: process.env.AUTH_JWT_SECRET ?? 'dev-insecure-secret-change-me',

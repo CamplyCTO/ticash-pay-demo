@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { assertCurrency, CURRENCIES, Currency } from '../money/currency';
 import { toMinor } from '../money/money';
 import { LedgerError } from '../ledger/engine';
+import { config } from '../config';
 import { customerWallet, agentFloat, agentCommission } from '../ledger/operations';
 import { applyBps } from '../fx/rate-service';
 import { RegistryError } from '../registry/store';
@@ -43,6 +44,45 @@ export function appUserOf(req: FastifyRequest): AppUserContext {
 
 const phoneSchema = z.string().min(6).max(20);
 
+// ---- Web cookie session (WS-2) ---------------------------------------------
+// When config.web.cookieSession is on, session creation sets an httpOnly refresh
+// cookie (XSS-safe) plus a readable double-submit CSRF cookie; refresh reads the
+// cookie and requires a matching CSRF header. Off by default → the token-in-body
+// flow (mobile) is unchanged. SameSite=Lax already blocks cross-site sends; the
+// CSRF pair is defense-in-depth for the same-site subdomain topology.
+const RT_COOKIE = 'ticash_rt';
+const CSRF_COOKIE = 'ticash_csrf';
+const domainOpt = () => (config.web.cookieDomain ? { domain: config.web.cookieDomain } : {});
+// The refresh token is scoped to the auth path (only sent on refresh/logout) — it's
+// httpOnly so JS never reads it. The CSRF token MUST be Path=/ so the web client can
+// read it via document.cookie from any page to echo it in the x-ticash-csrf header
+// (a Path=/app/auth cookie is invisible to a page at "/").
+const rtCookieBase = () => ({ path: '/app/auth', ...domainOpt() });
+const csrfCookieBase = () => ({ path: '/', ...domainOpt() });
+function issueSessionCookies(reply: FastifyReply, refreshToken: string): void {
+  if (!config.web.cookieSession) return;
+  const secure = config.web.cookieSecure;
+  reply.setCookie(RT_COOKIE, refreshToken, { ...rtCookieBase(), httpOnly: true, secure, sameSite: 'lax', maxAge: config.auth.refreshTtlSec });
+  reply.setCookie(CSRF_COOKIE, randomUUID(), { ...csrfCookieBase(), httpOnly: false, secure, sameSite: 'lax', maxAge: config.auth.refreshTtlSec });
+}
+function clearSessionCookies(reply: FastifyReply): void {
+  if (!config.web.cookieSession) return;
+  reply.clearCookie(RT_COOKIE, rtCookieBase());
+  reply.clearCookie(CSRF_COOKIE, csrfCookieBase());
+}
+/** Body token (native) wins with no CSRF; a cookie-sourced token requires a matching CSRF header. */
+function resolveRefreshToken(req: FastifyRequest, bodyToken?: string): string {
+  if (bodyToken) return bodyToken;
+  const rt = req.cookies?.[RT_COOKIE];
+  if (!rt) throw new RegistryError('missing refresh token', 'VALIDATION');
+  const headerCsrf = req.headers['x-ticash-csrf'];
+  const cookieCsrf = req.cookies?.[CSRF_COOKIE];
+  if (!headerCsrf || !cookieCsrf || headerCsrf !== cookieCsrf) {
+    throw new RegistryError('invalid csrf token', 'FORBIDDEN');
+  }
+  return rt;
+}
+
 /**
  * Mobile API for the customer + agent apps. Mounted under the `/app/*` prefix,
  * which is EXEMPT from the admin Basic Auth hook and instead JWT-authenticated.
@@ -77,9 +117,10 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
   });
 
   // Password login (email or phone + password) — no OTP.
-  app.post('/app/auth/login', async (req) => {
+  app.post('/app/auth/login', async (req, reply) => {
     const b = z.object({ handle: z.string().min(3), password: z.string().min(1), device: z.string().optional() }).parse(req.body);
     const tokens = await auth.loginWithPassword({ handle: b.handle, password: b.password, ...(b.device ? { device: b.device } : {}) });
+    issueSessionCookies(reply, tokens.refreshToken);
     req.log.info({ audit: 'auth.login', userId: tokens.user.id, role: tokens.user.role, method: 'password' }, 'login');
     return tokens;
   });
@@ -91,9 +132,10 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
   });
 
   // Complete a reset: phone + OTP + new password -> logs the user in.
-  app.post('/app/auth/password/reset', async (req) => {
+  app.post('/app/auth/password/reset', async (req, reply) => {
     const b = z.object({ phone: phoneSchema, code: z.string().min(4).max(12), newPassword: z.string().min(6).max(128), device: z.string().optional() }).parse(req.body);
     const tokens = await auth.resetPassword({ phone: b.phone, code: b.code, newPassword: b.newPassword, ...(b.device ? { device: b.device } : {}) });
+    issueSessionCookies(reply, tokens.refreshToken);
     req.log.info({ audit: 'auth.reset', userId: tokens.user.id }, 'password reset');
     return tokens;
   });
@@ -103,21 +145,30 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     return auth.requestOtp(b.phone);
   });
 
-  app.post('/app/auth/verify', async (req) => {
+  app.post('/app/auth/verify', async (req, reply) => {
     const b = z.object({ phone: phoneSchema, code: z.string().min(4).max(12), device: z.string().optional() }).parse(req.body);
     const tokens = await auth.verifyOtp({ phone: b.phone, code: b.code, ...(b.device ? { device: b.device } : {}) });
+    issueSessionCookies(reply, tokens.refreshToken);
     req.log.info({ audit: 'auth.login', userId: tokens.user.id, role: tokens.user.role }, 'login');
     return tokens;
   });
 
-  app.post('/app/auth/refresh', async (req) => {
-    const b = z.object({ refreshToken: z.string().min(1) }).parse(req.body);
-    return auth.refresh(b.refreshToken);
+  app.post('/app/auth/refresh', async (req, reply) => {
+    // Token from the body (native/bearer) or the httpOnly cookie (web). The cookie
+    // path enforces the double-submit CSRF check inside resolveRefreshToken.
+    const b = z.object({ refreshToken: z.string().min(1).optional() }).parse((req.body ?? {}) as unknown);
+    const tokens = await auth.refresh(resolveRefreshToken(req, b.refreshToken));
+    issueSessionCookies(reply, tokens.refreshToken); // rotate the cookie too
+    return tokens;
   });
 
-  app.post('/app/auth/logout', async (req) => {
-    const b = z.object({ refreshToken: z.string().min(1) }).parse(req.body);
-    return auth.logout(b.refreshToken);
+  app.post('/app/auth/logout', async (req, reply) => {
+    const b = z.object({ refreshToken: z.string().min(1).optional() }).parse((req.body ?? {}) as unknown);
+    // Lenient: revoke whatever token we have (body or cookie) and always clear cookies.
+    const rt = b.refreshToken ?? req.cookies?.[RT_COOKIE];
+    const result = rt ? await auth.logout(rt) : { ok: true as const };
+    clearSessionCookies(reply);
+    return result;
   });
 
   // ---- protected: scoped strictly to the caller's own party ---------------

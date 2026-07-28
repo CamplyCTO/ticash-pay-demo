@@ -61,6 +61,38 @@ export function applySecurity(app: FastifyInstance, cfg: SecurityConfig): void {
   });
 }
 
+/**
+ * CORS for the browser web apps. Hand-rolled (like the security headers above) so
+ * we control hook ORDER precisely: this must run BEFORE the rate-limit/auth hooks
+ * so a preflight OPTIONS is answered here and never hits the auth surface. Register
+ * it FIRST in buildServer.
+ *
+ * Strict allowlist + credentials (never '*'): the exact requesting Origin is echoed
+ * only when it is on the list; unknown origins get no CORS headers, so the browser
+ * blocks the response (non-browser clients — curl, native fetch — send no Origin and
+ * are unaffected). `Access-Control-Allow-Credentials: true` lets the cookie session
+ * (see the web plan) work; `Vary: Origin` keeps caches correct.
+ */
+export function applyCors(app: FastifyInstance, allowedOrigins: readonly string[]): void {
+  const allow = new Set(allowedOrigins);
+  app.addHook('onRequest', async (req, reply) => {
+    const origin = req.headers.origin;
+    if (!origin || !allow.has(origin)) return; // same-origin / non-browser / unknown → no CORS headers
+    reply.header('Access-Control-Allow-Origin', origin);
+    reply.header('Vary', 'Origin');
+    reply.header('Access-Control-Allow-Credentials', 'true');
+    // Preflight: answer here (204) and short-circuit so auth/rate-limit never see it.
+    if (req.method === 'OPTIONS' && req.headers['access-control-request-method']) {
+      reply
+        .header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        .header('Access-Control-Allow-Headers', 'content-type, authorization, x-ticash-csrf')
+        .header('Access-Control-Max-Age', '600')
+        .code(204)
+        .send();
+    }
+  });
+}
+
 export interface SecureConfigInput {
   requireSecureConfig: boolean;
   jwtSecret: string;

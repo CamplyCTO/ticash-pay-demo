@@ -54,7 +54,8 @@ import { WithdrawalService } from '../withdrawal/withdrawal-service';
 import { NowPaymentsAdapter } from '../deposits/nowpayments-adapter';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
-import { applySecurity, assertSecureConfig } from './security';
+import cookie from '@fastify/cookie';
+import { applyCors, applySecurity, assertSecureConfig } from './security';
 
 export interface ServerDeps {
   ledger: LedgerService;
@@ -182,7 +183,16 @@ export function buildServer(deps: ServerDeps = defaultDeps()) {
     bodyLimit: config.security.bodyLimitBytes,
   });
 
-  // WS-6 hardening: per-IP rate limiting + security headers, registered FIRST so the
+  // Cookie parsing + setting (for the optional web cookie session, WS-2). Harmless
+  // when unused: it just decorates req.cookies / reply.setCookie.
+  app.register(cookie);
+
+  // CORS for the browser web apps, registered FIRST so a preflight OPTIONS is
+  // answered before the rate limiter / auth hooks ever see it. Allowlist-driven
+  // (empty by default → no browser origins → unchanged behaviour for native/curl).
+  applyCors(app, config.web.allowedOrigins);
+
+  // WS-6 hardening: per-IP rate limiting + security headers, registered next so the
   // rate limiter runs before any auth work.
   applySecurity(app, config.security);
 
