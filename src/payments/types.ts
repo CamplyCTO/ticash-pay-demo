@@ -1,3 +1,4 @@
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
 import { Currency } from '../money/currency';
 
 /**
@@ -87,3 +88,26 @@ export const fetchHttpClient: HttpClient = {
     return { status: res.status, text: () => res.text() };
   },
 };
+
+/**
+ * An HttpClient whose requests egress through a fixed-IP HTTP proxy. Some payout
+ * providers (BenCash/Natcash) IP-whitelist a SINGLE address, but Render's egress
+ * is a changeable /24 range — so those calls tunnel through a small static-IP proxy
+ * (undici's ProxyAgent does the HTTPS CONNECT). The proxy only opens the tunnel; the
+ * TLS is end-to-end, so it never sees the provider key or payload. Enabled per-adapter
+ * when its *_PROXY_URL is set; everything else keeps using the direct fetch client.
+ */
+export function proxiedHttpClient(proxyUrl: string): HttpClient {
+  const dispatcher = new ProxyAgent(proxyUrl);
+  return {
+    async request(req) {
+      const res = await undiciFetch(req.url, {
+        method: req.method,
+        headers: req.headers,
+        body: req.body,
+        dispatcher,
+      });
+      return { status: res.status, text: () => res.text() };
+    },
+  };
+}

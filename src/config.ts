@@ -30,11 +30,15 @@ export const config = {
     clientId: process.env.MONCASH_CLIENT_ID ?? '',
     clientSecret: process.env.MONCASH_CLIENT_SECRET ?? '',
   },
-  /** Natcash payout via BenCash (Haiti). Enabled when a private key is present. */
+  /** Natcash payout via BenCash (Haiti). Enabled when a private key is present.
+   *  BenCash IP-whitelists a single fixed IP in production, but Render's egress is a
+   *  changeable /24 range — so set NATCASH_PROXY_URL to a static-IP proxy and these
+   *  calls tunnel through it (the whitelisted IP). Empty = direct (dev/sandbox). */
   natcash: {
     enabled: !!process.env.NATCASH_PRIVATE_KEY,
     base: process.env.NATCASH_BASE ?? 'https://reseller.test.bencashgroup.com/api/channel',
     privateKey: process.env.NATCASH_PRIVATE_KEY ?? '',
+    proxyUrl: process.env.NATCASH_PROXY_URL ?? '',
   },
   /** FX defaults (basis points): platform FX margin, platform transfer fee, provider payout fee. */
   fx: {

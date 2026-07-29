@@ -36,7 +36,7 @@ import { seedDemo } from '../demo/seed';
 import { LytexPaymentAdapter } from '../payments/lytex-adapter';
 import { PaymentIntentStore } from '../payments/intent-store';
 import { ProviderEventStore } from '../payments/event-store';
-import { PaymentInPort } from '../payments/types';
+import { PaymentInPort, proxiedHttpClient } from '../payments/types';
 import { MonCashPayoutAdapter } from '../payouts/moncash-adapter';
 import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import { PayoutService } from '../payouts/payout-service';
@@ -104,7 +104,10 @@ export function defaultDeps(): ServerDeps {
   // (BenCash) is the current Haiti rail; MonCash is the fallback once enabled.
   // Without any provider, payouts run in MANUAL mode (operator releases via panel).
   const payoutPort = config.natcash.enabled
-    ? new NatcashPayoutAdapter(config.natcash)
+    ? new NatcashPayoutAdapter(
+        config.natcash,
+        config.natcash.proxyUrl ? proxiedHttpClient(config.natcash.proxyUrl) : undefined,
+      )
     : config.moncash.enabled
       ? new MonCashPayoutAdapter(config.moncash)
       : undefined;
