@@ -58,6 +58,11 @@ export class RateService {
    * (in the destination currency). All exact integer math.
    */
   async priceTransfer(from: Currency, to: Currency, sendMinor: bigint): Promise<TransferPricing> {
+    // Same-currency is not a corridor. Reject it outright so a stray/bogus X->X rate
+    // row (e.g. an HTG->HTG midRate != 1) can never be used to price money — a direct
+    // API call could otherwise "mint" the difference. The app already hides this path;
+    // this is the server-authoritative backstop for both the quote and the transfer saga.
+    if (from === to) throw new LedgerError(`same-currency transfer not supported (${from}->${to})`, 'VALIDATION');
     const rec = await this.require(from, to);
     const rate = marginedRate(rec.midRate, rec.marginBps);
 

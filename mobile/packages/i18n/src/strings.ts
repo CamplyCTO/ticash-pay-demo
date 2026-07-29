@@ -55,12 +55,14 @@ export const en = {
     lookupPhone: 'Customer phone', findCustomer: 'Find customer', amount: 'Amount', confirm: 'Confirm',
     done: 'Done!', noCustomer: 'No customer with that phone', earned: 'Earned',
     onboardingTitle: 'Serve your community', onboardingSubtitle: 'Cash in and out, manage your float, and earn commission on every operation.',
+    onboardingNote: 'Agent accounts are created by the Ticash admin. Ask your admin to register you, then sign in with your phone.',
   },
   send: {
     title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient number',
     recipientName: 'Recipient name', recipientNamePlaceholder: 'Full name', rail: 'How they receive',
     rate: 'Exchange rate', fee: 'Fee', youPay: 'You pay', recipientGets: 'Recipient gets',
     enterAmount: 'Enter an amount to see the quote', noRate: 'No rate for this corridor',
+    sameCountry: 'Your account is in Haiti. Ticash sends money TO Haiti from abroad — a Haiti account receives transfers and can trade USDT. To send a remittance, use an account in Brazil, the US, Mexico, or the Dominican Republic.',
     sent: 'Sent!', toRecipient: 'to {recipient}', toHaiti: 'Haiti',
   },
   activity: {
@@ -144,12 +146,14 @@ export const pt: Dictionary = {
     lookupPhone: 'Telefone do cliente', findCustomer: 'Buscar cliente', amount: 'Valor', confirm: 'Confirmar',
     done: 'Pronto!', noCustomer: 'Nenhum cliente com esse telefone', earned: 'Ganho',
     onboardingTitle: 'Atenda sua comunidade', onboardingSubtitle: 'Faça cash-in e cash-out, gerencie seu caixa e ganhe comissão em cada operação.',
+    onboardingNote: 'Contas de agente são criadas pelo administrador da Ticash. Peça ao administrador para cadastrar você e depois entre com seu telefone.',
   },
   send: {
     title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Número do destinatário',
     recipientName: 'Nome do destinatário', recipientNamePlaceholder: 'Nome completo', rail: 'Como recebe',
     rate: 'Taxa de câmbio', fee: 'Taxa', youPay: 'Você paga', recipientGets: 'Destinatário recebe',
     enterAmount: 'Digite um valor para ver a cotação', noRate: 'Sem cotação para este trajeto',
+    sameCountry: 'Sua conta é do Haiti. A Ticash envia dinheiro PARA o Haiti a partir do exterior — uma conta do Haiti recebe transferências e pode negociar USDT. Para enviar uma remessa, use uma conta no Brasil, EUA, México ou Rep. Dominicana.',
     sent: 'Enviado!', toRecipient: 'para {recipient}', toHaiti: 'Haiti',
   },
   activity: {
@@ -228,12 +232,14 @@ export const fr: Dictionary = {
     lookupPhone: 'Téléphone du client', findCustomer: 'Trouver le client', amount: 'Montant', confirm: 'Confirmer',
     done: 'Terminé !', noCustomer: 'Aucun client avec ce numéro', earned: 'Gagné',
     onboardingTitle: 'Servez votre communauté', onboardingSubtitle: 'Encaissez et décaissez, gérez votre caisse et gagnez des commissions à chaque opération.',
+    onboardingNote: 'Les comptes agent sont créés par l’administrateur Ticash. Demandez à votre administrateur de vous enregistrer, puis connectez-vous avec votre téléphone.',
   },
   send: {
     title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Numéro du destinataire',
     recipientName: 'Nom du destinataire', recipientNamePlaceholder: 'Nom complet', rail: 'Mode de réception',
     rate: 'Taux de change', fee: 'Frais', youPay: 'Vous payez', recipientGets: 'Le destinataire reçoit',
     enterAmount: 'Saisissez un montant pour voir le devis', noRate: 'Aucun taux pour ce corridor',
+    sameCountry: 'Votre compte est au Haïti. Ticash envoie de l’argent VERS Haïti depuis l’étranger — un compte haïtien reçoit des transferts et peut échanger de l’USDT. Pour envoyer une remise, utilisez un compte au Brésil, aux États-Unis, au Mexique ou en Rép. dominicaine.',
     sent: 'Envoyé !', toRecipient: 'à {recipient}', toHaiti: 'Haïti',
   },
   activity: {

@@ -5,12 +5,15 @@ import { useI18n } from '@ticash/i18n';
 import { useAuthStore } from '../auth-store';
 import { messageForError } from '../errors';
 
-export function PhoneScreen() {
+/** `forceMode` overrides the URL `mode` param — the agent app pins it to 'login' so an
+ *  agent can never be driven into self-registration (agents are admin-provisioned). */
+export function PhoneScreen({ forceMode }: { forceMode?: 'login' | 'register' } = {}) {
   const t = useTheme();
   const { t: tr } = useI18n();
   const router = useRouter();
   const toast = useToast();
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>();
+  const mode = forceMode ?? modeParam;
   const startOtp = useAuthStore((s) => s.startOtp);
   const [phone, setPhone] = useState('+55');
   const [loading, setLoading] = useState(false);

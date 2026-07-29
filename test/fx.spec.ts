@@ -50,6 +50,14 @@ describe('RateService.priceTransfer — full economics', () => {
     expect(p.platformNetProfitMinor).toBeGreaterThan(0n);
     expect(p.platformFeeMinor).toBe(50n); // 0.5% of R$100 = R$0.50
   });
+
+  it('rejects a same-currency transfer even if a bogus X->X rate exists (no minting)', async () => {
+    const s = store();
+    const rates = new RateService(s);
+    await rates.setRate('HTG', 'HTG', '25', 3, 2, 3); // bogus identity-corridor rate
+    // Without the guard this would "price" 100 HTG -> 2500 HTG. It must throw instead.
+    await expect(rates.priceTransfer('HTG', 'HTG', 10000n)).rejects.toThrow(/same-currency/);
+  });
 });
 
 describe('RateService.quote', () => {
