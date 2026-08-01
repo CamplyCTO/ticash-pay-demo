@@ -446,8 +446,13 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         // Diagnostic (PII-safe: id only): tells us if real settlements are being rejected
         // at the signature gate vs. failing to match an intent downstream.
         let invId = '';
-        try { const p = JSON.parse(rawBody); invId = String(p?.data?.invoiceId ?? p?.data?._id ?? p?.data?.id ?? ''); } catch { /* ignore */ }
-        req.log.warn({ audit: 'lytex.webhook', result: 'signature_rejected', invoiceId: invId, bodyLen: rawBody.length }, 'lytex webhook rejected at signature');
+        let sig: string | null = null;
+        try { const p = JSON.parse(rawBody); invId = String(p?.data?.invoiceId ?? p?.data?._id ?? p?.data?.id ?? ''); sig = typeof p?.signature === 'string' ? p.signature : null; } catch { /* ignore */ }
+        // A webhook body under ~250 bytes cannot contain a payer name+CPF, so capturing
+        // the exact bytes + signature here is PII-safe and lets us reconcile production's
+        // signing scheme (the sandbox format we hard-coded differs). Remove after go-live.
+        const tiny = rawBody.length < 250 ? { rawBody, sig } : {};
+        req.log.warn({ audit: 'lytex.webhook', result: 'signature_rejected', invoiceId: invId, bodyLen: rawBody.length, ...tiny }, 'lytex webhook rejected at signature');
         reply.status(401);
         return { error: 'invalid signature' };
       }
