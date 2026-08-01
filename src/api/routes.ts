@@ -443,9 +443,15 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? '';
       const event = gateway.parseWebhook(rawBody, req.headers as Record<string, string | undefined>);
       if (!event) {
+        // Diagnostic (PII-safe: id only): tells us if real settlements are being rejected
+        // at the signature gate vs. failing to match an intent downstream.
+        let invId = '';
+        try { const p = JSON.parse(rawBody); invId = String(p?.data?.invoiceId ?? p?.data?._id ?? p?.data?.id ?? ''); } catch { /* ignore */ }
+        req.log.warn({ audit: 'lytex.webhook', result: 'signature_rejected', invoiceId: invId, bodyLen: rawBody.length }, 'lytex webhook rejected at signature');
         reply.status(401);
         return { error: 'invalid signature' };
       }
+      req.log.info({ audit: 'lytex.webhook', result: 'verified', providerId: event.providerId, paid: event.paid, event: event.event }, 'lytex webhook signature verified');
       // Edge idempotency: a redelivered webhook is acknowledged without reprocessing.
       const eventUid = `${event.event}:${event.providerId}`;
       if (await events.seen(gateway.name, eventUid)) return { ok: true, duplicate: true };
@@ -475,6 +481,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
             externalRef: event.providerId,
           });
           await intents.markPaid(event.providerId);
+          req.log.info({ audit: 'lytex.webhook', result: 'credited', providerId: event.providerId, customerId: intent.customerId, amount: String(intent.amountMinor) }, 'lytex webhook credited wallet');
           // Money landed in the wallet — alert the customer. Fire-and-forget: never
           // delay or fail the webhook ack on push.
           if (deps.push) {

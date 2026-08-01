@@ -609,6 +609,10 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         amountMinor,
         reference,
       });
+      // Diagnostic (PII-safe): the providerId here must equal the webhook's providerId
+      // for the credit to match. Lets us catch an id-shape mismatch (webhook invoiceId
+      // vs charge _id) that would otherwise show up as "unmatched" and never credit.
+      req.log.info({ audit: 'deposit.pix', result: 'charge_created', providerId: charge.providerId, customerId: me.externalId, amount: amountMinor.toString() }, 'pix deposit charge + intent created');
       reply.status(201);
       return { providerId: charge.providerId, status: charge.status, amountMinor: amountMinor.toString(), pix: charge.pix ?? {} };
     });
