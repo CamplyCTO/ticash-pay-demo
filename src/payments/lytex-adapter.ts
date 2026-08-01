@@ -179,6 +179,12 @@ export class LytexPaymentAdapter implements PaymentInPort {
       const overRaw = createHmac('sha256', secret).update(rawData, 'utf8').digest('base64');
       if (constantTimeEqual(sig, overRaw)) return true;
     }
+    // TEMP DIAGNOSTIC (remove after go-live): capture the rejected payload + signature
+    // so we can reverse-engineer production's exact signing (sandbox differed). Logged to
+    // stdout only; contains the webhook body. Gated so it only fires when explicitly on.
+    if (process.env.LYTEX_WH_DEBUG === '1') {
+      try { console.warn('LYTEX_WH_DEBUG ' + JSON.stringify({ recv: sig, rawBody: rawBody.slice(0, 2500) })); } catch { /* ignore */ }
+    }
     return false;
   }
 }
