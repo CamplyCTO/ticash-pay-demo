@@ -163,30 +163,67 @@ export class LytexPaymentAdapter implements PaymentInPort {
     };
   }
 
+  /**
+   * Lytex signs the webhook with HMAC-SHA256 over the `data` value, keyed by the
+   * integration's callback secret. Sandbox and production are the same platform but
+   * the exact bytes/encoding can vary (re-serialized vs raw substring; base64 vs hex),
+   * so we try every plausible signing input against BOTH encodings. This never weakens
+   * security: an attacker without the secret can't produce a valid HMAC by ANY variant.
+   */
   private verifyBodySignature(rawBody: string, body: any): boolean {
     const secret = this.cfg.callbackSecret;
     if (!secret) return false;
     const sig: string = body.signature;
-    // Primary: HMAC over JSON.stringify(data) (re-stringify round-trips to Lytex's bytes).
-    const reStringified = createHmac('sha256', secret).update(JSON.stringify(body.data), 'utf8').digest('base64');
-    if (constantTimeEqual(sig, reStringified)) return true;
-    // Fallback: HMAC over the exact raw `data` substring Lytex sent (robust to any
-    // serialization quirk), assuming the conventional `...,"signature":...` tail.
+    if (typeof sig !== 'string' || !sig) return false;
+
+    const inputs: string[] = [];
+    // 1. canonical re-stringify of the parsed data
+    try { inputs.push(JSON.stringify(body.data)); } catch { /* ignore */ }
+    // 2. the raw `data` value exactly as Lytex sent it (balanced-brace extraction —
+    //    robust to field order and whitespace, unlike a fixed ",\"signature\":" slice)
+    const rawData = extractRawJsonValue(rawBody, 'data');
+    if (rawData) inputs.push(rawData);
+    // 3. legacy contiguous slice (kept for back-compat with the sandbox tail format)
     const i = rawBody.indexOf('"data":');
     const j = rawBody.indexOf(',"signature":');
-    if (i >= 0 && j > i) {
-      const rawData = rawBody.slice(i + 7, j);
-      const overRaw = createHmac('sha256', secret).update(rawData, 'utf8').digest('base64');
-      if (constantTimeEqual(sig, overRaw)) return true;
-    }
-    // TEMP DIAGNOSTIC (remove after go-live): capture the rejected payload + signature
-    // so we can reverse-engineer production's exact signing (sandbox differed). Logged to
-    // stdout only; contains the webhook body. Gated so it only fires when explicitly on.
-    if (process.env.LYTEX_WH_DEBUG === '1') {
-      try { console.warn('LYTEX_WH_DEBUG ' + JSON.stringify({ recv: sig, rawBody: rawBody.slice(0, 2500) })); } catch { /* ignore */ }
+    if (i >= 0 && j > i) inputs.push(rawBody.slice(i + 7, j));
+    // 4. the full envelope with the signature field removed (some providers sign it all)
+    inputs.push(rawBody.replace(/\s*,?\s*"signature"\s*:\s*"[^"]*"/, '').replace(/,\s*}\s*$/, '}'));
+
+    for (const input of inputs) {
+      if (!input) continue;
+      const digest = createHmac('sha256', secret).update(input, 'utf8').digest();
+      if (constantTimeEqual(sig, digest.toString('base64'))) return true;
+      if (constantTimeEqual(sig, digest.toString('hex'))) return true;
     }
     return false;
   }
+}
+
+/** Extract the raw JSON text of `key`'s object/array value from a raw body, matching
+ *  balanced braces/brackets and respecting strings — so the exact bytes the provider
+ *  signed are recovered regardless of field order or whitespace. */
+function extractRawJsonValue(raw: string, key: string): string | null {
+  const marker = `"${key}":`;
+  const at = raw.indexOf(marker);
+  if (at < 0) return null;
+  let k = at + marker.length;
+  while (k < raw.length && /\s/.test(raw[k] as string)) k++;
+  const open = raw[k];
+  if (open !== '{' && open !== '[') return null;
+  const close = open === '{' ? '}' : ']';
+  let depth = 0, inStr = false, esc = false;
+  for (let m = k; m < raw.length; m++) {
+    const ch = raw[m];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === open) depth++;
+    else if (ch === close) { depth--; if (depth === 0) return raw.slice(k, m + 1); }
+  }
+  return null;
 }
 
 export class PaymentProviderError extends Error {
