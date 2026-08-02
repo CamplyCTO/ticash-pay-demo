@@ -58,11 +58,29 @@ export class RateService {
    * (in the destination currency). All exact integer math.
    */
   async priceTransfer(from: Currency, to: Currency, sendMinor: bigint): Promise<TransferPricing> {
-    // Same-currency is not a corridor. Reject it outright so a stray/bogus X->X rate
-    // row (e.g. an HTG->HTG midRate != 1) can never be used to price money — a direct
-    // API call could otherwise "mint" the difference. The app already hides this path;
-    // this is the server-authoritative backstop for both the quote and the transfer saga.
-    if (from === to) throw new LedgerError(`same-currency transfer not supported (${from}->${to})`, 'VALIDATION');
+    // Same-currency = a DOMESTIC transfer (e.g. Haiti HTG->HTG via MonCash/NatCash): no
+    // FX, just fees. The rate is a HARD identity '1' — never read from the DB — so a stray
+    // X->X rate row can't be used to mint the difference. Only the fee bps come from the
+    // (optional) X->X row, so the fee stays admin-configurable.
+    if (from === to) {
+      const rec = await this.store.get(from, to);
+      const platformFeeBps = rec?.platformFeeBps ?? 0;
+      const providerFeeBps = rec?.providerFeeBps ?? 0;
+      const platformFeeMinor = applyBps(sendMinor, platformFeeBps); // same ccy
+      const grossPayoutMinor = sendMinor; // rate 1
+      const providerFeeMinor = applyBps(grossPayoutMinor, providerFeeBps); // payout rail cut
+      return {
+        fromCurrency: from, toCurrency: to, rate: '1', midRate: '1',
+        sendMinor,
+        platformFeeMinor,
+        totalDebitMinor: sendMinor + platformFeeMinor,
+        grossPayoutMinor,
+        providerFeeMinor,
+        netToRecipientMinor: grossPayoutMinor - providerFeeMinor,
+        fxMarginMinor: 0n,
+        platformNetProfitMinor: platformFeeMinor - providerFeeMinor,
+      };
+    }
     const rec = await this.require(from, to);
     const rate = marginedRate(rec.midRate, rec.marginBps);
 

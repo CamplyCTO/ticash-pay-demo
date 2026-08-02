@@ -24,7 +24,8 @@ export function useMe() {
 
 /** Live transfer economics for a corridor + amount (debounce the amount in the UI). */
 export function useQuote(from: Currency, to: Currency, amount: string) {
-  const enabled = useAuthed() && Number(amount) > 0 && from !== to;
+  // Same-currency IS allowed now (domestic Haiti HTG->HTG, fee-only) — priced server-side.
+  const enabled = useAuthed() && Number(amount) > 0;
   return useQuery<TransferPricing>({
     queryKey: ['quote', from, to, amount],
     queryFn: () => api.priceTransfer(from, to, amount),

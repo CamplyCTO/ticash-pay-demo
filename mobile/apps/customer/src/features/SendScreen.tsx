@@ -29,9 +29,6 @@ export function SendScreen() {
   const send = useSendTransfer();
 
   const railApplies = to === 'HTG'; // MonCash/NatCash are Haiti mobile-money rails
-  // A Haiti-registered account can't remit TO Haiti (from===to isn't a corridor).
-  // Ticash sends to Haiti FROM abroad; Haiti accounts receive money + trade USDT.
-  const sameCountry = from === to;
 
   // Stable idempotency key per logical send: same (corridor, amount, recipient) ->
   // same key, so a retry after a lost response can never double-send money. A new
@@ -150,15 +147,8 @@ export function SendScreen() {
         </View>
       ) : null}
 
-      {/* Live quote (or a clear explanation when the account is in Haiti itself) */}
-      {sameCountry ? (
-        <Card>
-          <Row style={{ gap: t.spacing(2), alignItems: 'flex-start' }}>
-            <Ionicons name="information-circle-outline" size={22} color={t.colors.primary} />
-            <Text variant="body" color="textMuted" style={{ flex: 1 }}>{tr('send.sameCountry')}</Text>
-          </Row>
-        </Card>
-      ) : amountValid ? (
+      {/* Live quote (domestic HTG->HTG is fee-only, priced server-side at rate 1) */}
+      {amountValid ? (
         <Card>
           {quote.isLoading || debounced !== amount ? (
             <Text variant="body" color="textMuted" center>{tr('common.loading')}</Text>
