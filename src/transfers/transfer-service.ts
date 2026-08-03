@@ -116,6 +116,20 @@ export class TransferService {
         // computed on the FIRST run is the one that sticks.
         const providerFeeMinor = await this.resolveProviderFee(t.fromCurrency, t.toCurrency, quote.receiveMinor);
         await this.payouts.createForTransfer({ correlationId, recipientRef: t.recipientRef, quote, senderId: t.senderId, providerFeeMinor });
+        // AUTO-DISBURSE: push to the provider immediately (created → submitted → settled),
+        // so the recipient is paid without a manual step. Best-effort + idempotent: a
+        // provider failure leaves the payout in created/submitted (money safe in
+        // payout_suspense) for a retry/admin action — it must NOT block completing the
+        // transfer or throw. Manual mode (no port) just logs and leaves it `created`.
+        try {
+          const sub = await this.payouts.submit(correlationId);
+          const done = sub.status === 'submitted' ? await this.payouts.sync(correlationId) : sub;
+          // eslint-disable-next-line no-console
+          console.log(JSON.stringify({ audit: 'payout.auto', correlationId, status: done.status, providerRef: done.providerRef ?? null, lastError: done.lastError ?? null, recipient: done.recipientRef, amount: String(done.amountMinor), currency: done.currency }));
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log(JSON.stringify({ audit: 'payout.auto', correlationId, status: 'error', error: String((e as Error)?.message ?? e).slice(0, 300) }));
+        }
       }
       t = await this.store.setStatus(correlationId, 'completed');
     }

@@ -56,7 +56,7 @@ describe('TransferService saga', () => {
     expect((await store.get(r.correlationId))!.status).toBe('completed');
   });
 
-  it('hands off to the payout state machine when a payout rail is wired', async () => {
+  it('AUTO-submits the payout to the provider when a rail is wired (no manual step)', async () => {
     const ledger = await fundedLedger();
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
@@ -64,7 +64,8 @@ describe('TransferService saga', () => {
 
     const payoutsList = await payoutStore.list();
     expect(payoutsList).toHaveLength(1);
-    expect(payoutsList[0]).toMatchObject({ correlationId: r.correlationId, status: 'created', amountMinor: 1218000n });
+    // auto-disbursed: created -> submitted (FakePort returns providerRef, then pending on sync)
+    expect(payoutsList[0]).toMatchObject({ correlationId: r.correlationId, status: 'submitted', providerRef: 'mc-1', amountMinor: 1218000n });
   });
 
   it('EXECUTES a same-currency Haiti HTG->HTG transfer: rate 1, fees applied, ledger balanced, no minting', async () => {
@@ -87,9 +88,10 @@ describe('TransferService saga', () => {
     expect(r.quote.receiveMinor).toBe(10000n);     // gross = send at rate 1 — NOT minted (e.g. not 250000)
     expect(await ledger.getBalance(wallet('ht', 'HTG'))).toBe(89800n); // 100000 - (10000 + 2% platform fee)
     expect((await ledger.reconcile()).balanced).toBe(true);           // <-- the real check: money is conserved
-    const p = (await payoutStore.list())[0];
+    const p = (await payoutStore.list())[0]!;
     expect(p.amountMinor).toBe(10000n);            // gross handed to the payout rail
     expect(p.providerFeeMinor).toBe(500n);         // 5% locked (the quote() fix) => recipient nets 9500
+    expect(p.status).toBe('submitted');            // auto-disbursed (FakePort accepted, sync pending)
   });
 
   it('is idempotent: re-initiating with the same key never double-posts', async () => {
