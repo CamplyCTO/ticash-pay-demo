@@ -31,6 +31,15 @@ class FakePort implements PayoutPort {
   async getStatus() { return { state: 'pending' as const, raw: {} }; }
 }
 
+// Like the real Natcash/BenCash rail: confirmed-at-send, so getStatus → success → settle.
+// Counts sendPayout calls to catch a double-pay.
+class SettlingPort implements PayoutPort {
+  readonly name = 'natcash';
+  sends = 0;
+  async sendPayout() { this.sends++; return { providerRef: 'bc-' + this.sends, raw: {} }; }
+  async getStatus() { return { state: 'success' as const, raw: {} }; }
+}
+
 describe('deriveUuid (correlation id)', () => {
   it('is deterministic, distinct per seed, and UUID-shaped', () => {
     expect(deriveUuid('xfer-1')).toBe(deriveUuid('xfer-1')); // stable for retries
@@ -92,6 +101,33 @@ describe('TransferService saga', () => {
     expect(p.amountMinor).toBe(10000n);            // gross handed to the payout rail
     expect(p.providerFeeMinor).toBe(500n);         // 5% locked (the quote() fix) => recipient nets 9500
     expect(p.status).toBe('submitted');            // auto-disbursed (FakePort accepted, sync pending)
+  });
+
+  it('auto-disburse SETTLES to the ledger, stays balanced, and never double-pays on re-run', async () => {
+    const ledger = new LedgerService(new InMemoryLedgerStore());
+    await ledger.fundWallet({ customerId: 'ht', currency: 'HTG', amountMinor: 100000n, idempotencyKey: 'f' }); // 1000 HTG
+    const rates = new RateService(new InMemoryRateStore({ marginBps: 200, platformFeeBps: 0, providerFeeBps: 335 }));
+    await rates.setRate('HTG', 'HTG', '1', 0, 200, 500); // 2% platform, 5% provider
+    const port = new SettlingPort();
+    const payoutStore = new InMemoryPayoutStore();
+    const payouts = new PayoutService(port, payoutStore, ledger);
+    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, rates);
+
+    const r = await svc.initiate({
+      senderId: 'ht', recipientRef: '55342510', fromCurrency: 'HTG', toCurrency: 'HTG',
+      sendMinor: 10000n, idempotencyKey: 'auto-1', // send 100 HTG
+    });
+
+    const p = (await payoutStore.list())[0]!;
+    expect(p.status).toBe('settled');              // auto submitted + synced to settled (no manual step)
+    expect(port.sends).toBe(1);                    // provider called EXACTLY once
+    expect(await ledger.getBalance(wallet('ht', 'HTG'))).toBe(89800n);          // debited 100 + 2%
+    expect(await ledger.getBalance(sys('payout_suspense', 'HTG'))).toBe(0n);    // drained by settle
+    expect((await ledger.reconcile()).balanced).toBe(true);                     // money conserved after settle
+    // crash-recovery / duplicate run must NOT double-pay or unbalance
+    await svc.run(r.correlationId);
+    expect(port.sends).toBe(1);
+    expect((await ledger.reconcile()).balanced).toBe(true);
   });
 
   it('is idempotent: re-initiating with the same key never double-posts', async () => {
