@@ -8,6 +8,8 @@ import { TransferService } from '../src/transfers/transfer-service';
 import { InMemoryPayoutStore } from '../src/payouts/payout-store';
 import { PayoutService } from '../src/payouts/payout-service';
 import { PayoutPort } from '../src/payouts/types';
+import { RateService } from '../src/fx/rate-service';
+import { InMemoryRateStore } from '../src/fx/rate-store';
 
 const sys = (kind: string, ccy: any): AccountSpec => ({ ownerType: 'system', ownerId: null, kind: kind as any, currency: ccy });
 const wallet = (id: string, ccy: any): AccountSpec => ({ ownerType: 'customer', ownerId: id, kind: 'wallet', currency: ccy });
@@ -63,6 +65,31 @@ describe('TransferService saga', () => {
     const payoutsList = await payoutStore.list();
     expect(payoutsList).toHaveLength(1);
     expect(payoutsList[0]).toMatchObject({ correlationId: r.correlationId, status: 'created', amountMinor: 1218000n });
+  });
+
+  it('EXECUTES a same-currency Haiti HTG->HTG transfer: rate 1, fees applied, ledger balanced, no minting', async () => {
+    const ledger = new LedgerService(new InMemoryLedgerStore());
+    await ledger.fundWallet({ customerId: 'ht', currency: 'HTG', amountMinor: 100000n, idempotencyKey: 'fund-htg' }); // 1000 HTG
+    const rates = new RateService(new InMemoryRateStore({ marginBps: 200, platformFeeBps: 0, providerFeeBps: 335 }));
+    await rates.setRate('HTG', 'HTG', '1', 0, 200, 500); // rate 1, 2% platform, 5% provider
+    const store = new InMemoryTransferStore();
+    const payoutStore = new InMemoryPayoutStore();
+    const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
+    const svc = new TransferService(ledger, store, payouts, rates);
+
+    const r = await svc.initiate({
+      senderId: 'ht', recipientRef: '50912345678', fromCurrency: 'HTG', toCurrency: 'HTG',
+      sendMinor: 10000n, idempotencyKey: 'htg-dom-1', // send 100 HTG
+    });
+
+    expect(r.status).toBe('completed');            // the saga runs to completion for from===to
+    expect(r.quote.rate).toBe('1');                // no FX
+    expect(r.quote.receiveMinor).toBe(10000n);     // gross = send at rate 1 — NOT minted (e.g. not 250000)
+    expect(await ledger.getBalance(wallet('ht', 'HTG'))).toBe(89800n); // 100000 - (10000 + 2% platform fee)
+    expect((await ledger.reconcile()).balanced).toBe(true);           // <-- the real check: money is conserved
+    const p = (await payoutStore.list())[0];
+    expect(p.amountMinor).toBe(10000n);            // gross handed to the payout rail
+    expect(p.providerFeeMinor).toBe(500n);         // 5% locked (the quote() fix) => recipient nets 9500
   });
 
   it('is idempotent: re-initiating with the same key never double-posts', async () => {
