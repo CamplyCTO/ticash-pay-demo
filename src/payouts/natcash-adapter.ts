@@ -32,23 +32,33 @@ export class NatcashPayoutAdapter implements PayoutPort {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
-  async sendPayout(req: PayoutRequest): Promise<PayoutSubmitResult> {
+  /**
+   * Build the EXACT `requestcashin` request (URL + JSON body + the signed dataString).
+   * Extracted so a diagnostic can reproduce precisely what production sends to BenCash
+   * WITHOUT posting (no money, no external call). `signedData` contains the accessKey
+   * (= privateKey+requestId) in cleartext — callers that surface it must redact the key.
+   */
+  buildRequestCashin(req: PayoutRequest): {
+    url: string;
+    requestId: number;
+    ak: string;
+    signedData: string;
+    body: Record<string, unknown>;
+  } {
     const requestId = requestIdFor(req.correlationId);
     const ak = this.cfg.privateKey + requestId;
     const amount = Number(fromMinor(req.amountMinor, req.currency)); // HTG major units
     const content = (req.desc ?? 'transfer').replace(/[${}]/g, ' ').slice(0, 60);
     const timestamp = this.now();
+    const signedData = `{accessKey=${ak}$requestId=${requestId}$toAccountNumber=${req.recipientRef}$amount=${String(amount)}$content=${content}$timestamp=${timestamp}}`;
+    const body = { requestId, toAccountNumber: req.recipientRef, amount, content, timestamp, signature: this.sign(signedData) };
+    return { url: `${this.cfg.base}/requestcashin`, requestId, ak, signedData, body };
+  }
 
+  async sendPayout(req: PayoutRequest): Promise<PayoutSubmitResult> {
     // --- 1. requestcashin (initialize) ---
-    const reqData = `{accessKey=${ak}$requestId=${requestId}$toAccountNumber=${req.recipientRef}$amount=${String(amount)}$content=${content}$timestamp=${timestamp}}`;
-    const reqResp = await this.post('requestcashin', {
-      requestId,
-      toAccountNumber: req.recipientRef,
-      amount,
-      content,
-      timestamp,
-      signature: this.sign(reqData),
-    });
+    const { requestId, ak, body: reqBody } = this.buildRequestCashin(req);
+    const reqResp = await this.post('requestcashin', reqBody);
     if (reqResp.resultCode !== '200' || !reqResp.result?.txId) {
       throw new NatcashError(`requestcashin failed: ${reqResp.message ?? reqResp.resultCode}`, reqResp);
     }

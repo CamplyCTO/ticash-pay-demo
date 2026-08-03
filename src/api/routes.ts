@@ -5,6 +5,8 @@ import { toMinor } from '../money/money';
 import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
 import { LedgerError } from '../ledger/engine';
 import { RegistryError } from '../registry/store';
+import { config } from '../config';
+import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import type { ServerDeps } from './server';
 
 const currencySchema = z.string().transform((v) => assertCurrency(v));
@@ -548,6 +550,35 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       const b = z.object({ rail: z.enum(RAILS), enabled: z.boolean() }).parse(req.body);
       await settings.set(`payout.auto.${b.rail}`, b.enabled ? '1' : '0');
       return { rail: b.rail, enabled: b.enabled };
+    });
+  }
+
+  // TEMP DIAGNOSTIC (remove after go-live): reproduce the EXACT requestcashin request we
+  // send to BenCash — built by the real adapter code, but WITHOUT posting (no money, no
+  // external call) — so BenCash can verify our signature/format against their empty 500.
+  // The signed dataString carries the key in cleartext, so it is redacted before return.
+  if (config.natcash.enabled) {
+    app.post('/diag/natcash-payload', async (req) => {
+      const b = z
+        .object({ recipient: z.string().min(3), amountHtg: z.coerce.number().positive(), correlationId: z.string().optional() })
+        .parse(req.body);
+      const built = new NatcashPayoutAdapter(config.natcash).buildRequestCashin({
+        correlationId: b.correlationId ?? 'diag-sample',
+        recipientRef: b.recipient,
+        amountMinor: toMinor(String(b.amountHtg), 'HTG'),
+        currency: 'HTG',
+      });
+      const KEY = config.natcash.privateKey;
+      const redact = (s: string): string => (KEY ? s.split(KEY).join('<PRIVATE_KEY>') : s);
+      return {
+        method: 'POST',
+        url: built.url,
+        headers: { 'content-type': 'application/json', accept: 'application/json', skml: '<PRIVATE_KEY>' },
+        body: built.body, // signature is an HMAC-SHA256 digest — not the key
+        signedDataString: redact(built.signedData),
+        signatureRecipe: 'signature = HMAC_SHA256(privateKey, signedDataString) as lowercase hex; skml header = privateKey',
+        observedResult: 'On live POST, BenCash returns HTTP 500 with an empty body.',
+      };
     });
   }
 }
