@@ -556,6 +556,7 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
   // TEMP DIAGNOSTIC (remove after go-live): reproduce the EXACT requestcashin request we
   // send to BenCash — built by the real adapter code, but WITHOUT posting (no money, no
   // external call) — so BenCash can verify our signature/format against their empty 500.
+  // (build marker: natcash-diag-v2)
   // The signed dataString carries the key in cleartext, so it is redacted before return.
   if (config.natcash.enabled) {
     app.post('/diag/natcash-payload', async (req) => {
