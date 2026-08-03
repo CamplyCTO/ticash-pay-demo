@@ -99,10 +99,21 @@ export class NatcashPayoutAdapter implements PayoutPort {
       json = { _raw: text };
     }
     if (res.status >= 300) {
-      // TEMP DIAGNOSTIC (remove after go-live): capture BenCash's error body so we can
-      // see WHY requestcashin/confirmcashin fails (auth / bad recipient / missing PIN /
-      // etc.). The body is the provider's own error — no payer PII.
-      try { console.log(JSON.stringify({ audit: 'natcash.error', path, status: res.status, body: text.slice(0, 800) })); } catch { /* ignore */ }
+      // TEMP DIAGNOSTIC (remove after go-live): capture the EXACT request we send +
+      // BenCash's response, so BenCash can diagnose their 500. `reqBody` holds the
+      // posted JSON (requestId/toAccountNumber/amount/content/timestamp/signature) — the
+      // signature is an HMAC digest, NOT the key, and the `skml` header (the key) is
+      // deliberately NOT logged. No payer PII.
+      try {
+        console.log(JSON.stringify({
+          audit: 'natcash.error',
+          path,
+          url: `${this.cfg.base}/${path}`,
+          status: res.status,
+          reqBody: body,
+          respBody: text.slice(0, 1200),
+        }));
+      } catch { /* ignore */ }
       throw new NatcashError(`natcash ${path} HTTP ${res.status}`, json);
     }
     return json;
