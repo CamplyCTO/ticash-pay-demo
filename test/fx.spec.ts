@@ -63,6 +63,16 @@ describe('RateService.priceTransfer — full economics', () => {
     expect(p.netToRecipientMinor).toBe(9500n); // 100 - 5% provider fee
     expect(p.totalDebitMinor).toBe(10200n); // 100 + 2% platform fee
   });
+
+  it('quote() same-currency exposes the row fees so the payout deducts the SAME provider fee', async () => {
+    const s = store();
+    const rates = new RateService(s);
+    await rates.setRate('HTG', 'HTG', '1', 0, 200, 500);
+    const q = await rates.quote('HTG', 'HTG');
+    expect(q.rate).toBe('1');
+    expect(q.platformFeeBps).toBe(200);
+    expect(q.providerFeeBps).toBe(500); // NOT 0 — must match priceTransfer, else recipient gets gross
+  });
 });
 
 describe('RateService.quote', () => {

@@ -42,7 +42,15 @@ export class RateService {
 
   async quote(from: Currency, to: Currency): Promise<RateQuote> {
     if (from === to) {
-      return { fromCurrency: from, toCurrency: to, midRate: '1', marginBps: 0, platformFeeBps: 0, providerFeeBps: 0, rate: '1', source: 'identity', asOf: ISO };
+      // Domestic (same-currency): rate is a hard identity '1', but the FEES must match
+      // priceTransfer — read them from the (optional) X->X row so the payout's provider
+      // fee (resolveProviderFee) equals the fee shown in the quote. Never read the midRate.
+      const rec = await this.store.get(from, to);
+      return {
+        fromCurrency: from, toCurrency: to, midRate: '1', marginBps: 0,
+        platformFeeBps: rec?.platformFeeBps ?? 0, providerFeeBps: rec?.providerFeeBps ?? 0,
+        rate: '1', source: rec ? rec.source : 'identity', asOf: rec?.updatedAt ?? ISO,
+      };
     }
     const rec = await this.require(from, to);
     return {
