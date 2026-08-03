@@ -98,7 +98,13 @@ export class NatcashPayoutAdapter implements PayoutPort {
     } catch {
       json = { _raw: text };
     }
-    if (res.status >= 300) throw new NatcashError(`natcash ${path} HTTP ${res.status}`, json);
+    if (res.status >= 300) {
+      // TEMP DIAGNOSTIC (remove after go-live): capture BenCash's error body so we can
+      // see WHY requestcashin/confirmcashin fails (auth / bad recipient / missing PIN /
+      // etc.). The body is the provider's own error — no payer PII.
+      try { console.log(JSON.stringify({ audit: 'natcash.error', path, status: res.status, body: text.slice(0, 800) })); } catch { /* ignore */ }
+      throw new NatcashError(`natcash ${path} HTTP ${res.status}`, json);
+    }
     return json;
   }
 }
