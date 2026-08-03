@@ -6,6 +6,10 @@ import { PayoutService } from '../payouts/payout-service';
 import { RateService, applyBps } from '../fx/rate-service';
 import { TransferPricing } from '../fx/types';
 import { NewTransfer, PayoutRail, TransferRecord, TransferStore } from './transfer-store';
+import { SettingsStore } from '../settings/settings-store';
+
+/** Settings key: is auto-disbursement enabled for a payout rail? '1' = auto, else manual. */
+export const autoDisburseKey = (rail: string): string => `payout.auto.${rail}`;
 
 /**
  * Orchestrates a cross-currency transfer as a crash-safe saga. `initiate` persists
@@ -24,6 +28,7 @@ export class TransferService {
     private readonly store: TransferStore,
     private readonly payouts?: PayoutService,
     private readonly rates?: RateService,
+    private readonly settings?: SettingsStore,
   ) {}
 
   async initiate(args: {
@@ -116,19 +121,24 @@ export class TransferService {
         // computed on the FIRST run is the one that sticks.
         const providerFeeMinor = await this.resolveProviderFee(t.fromCurrency, t.toCurrency, quote.receiveMinor);
         await this.payouts.createForTransfer({ correlationId, recipientRef: t.recipientRef, quote, senderId: t.senderId, providerFeeMinor });
-        // AUTO-DISBURSE: push to the provider immediately (created → submitted → settled),
-        // so the recipient is paid without a manual step. Best-effort + idempotent: a
-        // provider failure leaves the payout in created/submitted (money safe in
-        // payout_suspense) for a retry/admin action — it must NOT block completing the
-        // transfer or throw. Manual mode (no port) just logs and leaves it `created`.
-        try {
-          const sub = await this.payouts.submit(correlationId);
-          const done = sub.status === 'submitted' ? await this.payouts.sync(correlationId) : sub;
-          // eslint-disable-next-line no-console
-          console.log(JSON.stringify({ audit: 'payout.auto', correlationId, status: done.status, providerRef: done.providerRef ?? null, lastError: done.lastError ?? null, recipient: done.recipientRef, amount: String(done.amountMinor), currency: done.currency }));
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.log(JSON.stringify({ audit: 'payout.auto', correlationId, status: 'error', error: String((e as Error)?.message ?? e).slice(0, 300) }));
+        // AUTO-DISBURSE — ONLY when the admin has enabled it for THIS rail (MonCash/NatCash
+        // toggle in the panel). Off by default: the payout stays `created` for manual
+        // release. This lets the operator turn a rail's auto off during a provider outage
+        // and keep operating manually, without touching the other rail. Best-effort +
+        // idempotent: a provider failure leaves the payout in created/submitted (money safe
+        // in payout_suspense) for retry/admin — it never blocks or throws.
+        const rail = t.payoutRail ?? '';
+        const autoOn = !!rail && (await this.settings?.get(autoDisburseKey(rail))) === '1';
+        if (autoOn) {
+          try {
+            const sub = await this.payouts.submit(correlationId);
+            const done = sub.status === 'submitted' ? await this.payouts.sync(correlationId) : sub;
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify({ audit: 'payout.auto', correlationId, rail, status: done.status, providerRef: done.providerRef ?? null, lastError: done.lastError ?? null, recipient: done.recipientRef, amount: String(done.amountMinor), currency: done.currency }));
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.log(JSON.stringify({ audit: 'payout.auto', correlationId, rail, status: 'error', error: String((e as Error)?.message ?? e).slice(0, 300) }));
+          }
         }
       }
       t = await this.store.setStatus(correlationId, 'completed');

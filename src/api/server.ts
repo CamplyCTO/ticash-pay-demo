@@ -20,6 +20,7 @@ import {
   createCashoutStore,
   createWithdrawalStore,
 } from '../ledger/store-factory';
+import { SettingsStore } from '../settings/settings-store';
 import { RateService } from '../fx/rate-service';
 import { seedDefaultRates } from '../fx/rate-store';
 import { RateStore } from '../fx/types';
@@ -84,6 +85,8 @@ export interface ServerDeps {
   push?: { service: PushService };
   /** P2P USDT escrow marketplace (WS-4). Always wired by defaultDeps. */
   p2p?: { service: P2PService };
+  /** Runtime settings k/v (per-rail payout auto-disburse toggles, etc.). Wired by defaultDeps. */
+  settings?: SettingsStore;
   /** Cash-out approval: agent requests → customer approves before any debit. */
   cashout?: { service: CashoutService };
   /** USDT withdrawal (off-ramp): customer requests → held → operator sends + settles. */
@@ -117,8 +120,12 @@ export function defaultDeps(): ServerDeps {
   const rateStore = createRateStore();
   const rateService = new RateService(rateStore);
   deps.fx = { service: rateService, store: rateStore };
+  // Settings store powers runtime-editable toggles (P2P commission, per-rail payout
+  // auto-disburse). Created here so the transfer service can read the auto-disburse flags.
+  const settingsStore = createSettingsStore();
+  deps.settings = settingsStore;
   deps.transfers = {
-    service: new TransferService(ledger, createTransferStore(), deps.payouts.service, rateService),
+    service: new TransferService(ledger, createTransferStore(), deps.payouts.service, rateService, settingsStore),
   };
   if (config.screening.enabled) {
     deps.screening = { service: new ScreeningService(DEFAULT_SANCTIONS, createScreeningStore(), config.screening.threshold) };
@@ -157,8 +164,6 @@ export function defaultDeps(): ServerDeps {
   }
   // P2P USDT escrow marketplace — always available (the NOWPayments on/off-ramp
   // that funds/withdraws USDT is wired separately once the client provides keys).
-  // Settings store powers the admin-editable P2P commission (persisted).
-  const settingsStore = createSettingsStore();
   deps.p2p = { service: new P2PService(ledger, createP2PStore(), config.p2p, settingsStore) };
   // Cash-out approval: an agent's cash-out becomes a request the customer approves.
   deps.cashout = { service: new CashoutService(ledger, createCashoutStore(), config.cashout) };

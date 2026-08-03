@@ -532,4 +532,22 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       return service.failManually(p.correlationId);
     });
   }
+
+  // Per-rail auto-disburse toggle. ON = a completed transfer auto-submits to the provider;
+  // OFF (default) = the payout stays `created` for manual release. Lets the operator turn a
+  // rail's automation off during a provider outage and keep operating manually.
+  if (deps.settings) {
+    const settings = deps.settings;
+    const RAILS = ['moncash', 'natcash'] as const;
+    app.get('/payouts/auto', async () => {
+      const out: Record<string, boolean> = {};
+      for (const r of RAILS) out[r] = (await settings.get(`payout.auto.${r}`)) === '1';
+      return out;
+    });
+    app.post('/payouts/auto', async (req) => {
+      const b = z.object({ rail: z.enum(RAILS), enabled: z.boolean() }).parse(req.body);
+      await settings.set(`payout.auto.${b.rail}`, b.enabled ? '1' : '0');
+      return { rail: b.rail, enabled: b.enabled };
+    });
+  }
 }

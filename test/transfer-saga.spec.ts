@@ -10,6 +10,14 @@ import { PayoutService } from '../src/payouts/payout-service';
 import { PayoutPort } from '../src/payouts/types';
 import { RateService } from '../src/fx/rate-service';
 import { InMemoryRateStore } from '../src/fx/rate-store';
+import { InMemorySettingsStore } from '../src/settings/settings-store';
+
+/** A settings store with a rail's auto-disburse toggle ON. */
+async function autoOn(rail: 'natcash' | 'moncash') {
+  const s = new InMemorySettingsStore();
+  await s.set(`payout.auto.${rail}`, '1');
+  return s;
+}
 
 const sys = (kind: string, ccy: any): AccountSpec => ({ ownerType: 'system', ownerId: null, kind: kind as any, currency: ccy });
 const wallet = (id: string, ccy: any): AccountSpec => ({ ownerType: 'customer', ownerId: id, kind: 'wallet', currency: ccy });
@@ -65,16 +73,26 @@ describe('TransferService saga', () => {
     expect((await store.get(r.correlationId))!.status).toBe('completed');
   });
 
-  it('AUTO-submits the payout to the provider when a rail is wired (no manual step)', async () => {
+  it('AUTO-submits the payout when the rail toggle is ON', async () => {
     const ledger = await fundedLedger();
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
-    const r = await new TransferService(ledger, new InMemoryTransferStore(), payouts).initiate(ARGS);
+    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, undefined, await autoOn('natcash'));
+    const r = await svc.initiate({ ...ARGS, payoutRail: 'natcash' });
 
     const payoutsList = await payoutStore.list();
     expect(payoutsList).toHaveLength(1);
     // auto-disbursed: created -> submitted (FakePort returns providerRef, then pending on sync)
     expect(payoutsList[0]).toMatchObject({ correlationId: r.correlationId, status: 'submitted', providerRef: 'mc-1', amountMinor: 1218000n });
+  });
+
+  it('leaves the payout `created` for MANUAL release when the rail toggle is OFF (default)', async () => {
+    const ledger = await fundedLedger();
+    const payoutStore = new InMemoryPayoutStore();
+    const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
+    // no settings store -> auto is off -> payout must NOT be submitted (Jean's manual fallback)
+    await new TransferService(ledger, new InMemoryTransferStore(), payouts).initiate({ ...ARGS, payoutRail: 'natcash' });
+    expect((await payoutStore.list())[0]!.status).toBe('created');
   });
 
   it('EXECUTES a same-currency Haiti HTG->HTG transfer: rate 1, fees applied, ledger balanced, no minting', async () => {
@@ -85,11 +103,11 @@ describe('TransferService saga', () => {
     const store = new InMemoryTransferStore();
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
-    const svc = new TransferService(ledger, store, payouts, rates);
+    const svc = new TransferService(ledger, store, payouts, rates, await autoOn('natcash'));
 
     const r = await svc.initiate({
       senderId: 'ht', recipientRef: '50912345678', fromCurrency: 'HTG', toCurrency: 'HTG',
-      sendMinor: 10000n, idempotencyKey: 'htg-dom-1', // send 100 HTG
+      payoutRail: 'natcash', sendMinor: 10000n, idempotencyKey: 'htg-dom-1', // send 100 HTG
     });
 
     expect(r.status).toBe('completed');            // the saga runs to completion for from===to
@@ -111,11 +129,11 @@ describe('TransferService saga', () => {
     const port = new SettlingPort();
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(port, payoutStore, ledger);
-    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, rates);
+    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, rates, await autoOn('natcash'));
 
     const r = await svc.initiate({
       senderId: 'ht', recipientRef: '55342510', fromCurrency: 'HTG', toCurrency: 'HTG',
-      sendMinor: 10000n, idempotencyKey: 'auto-1', // send 100 HTG
+      payoutRail: 'natcash', sendMinor: 10000n, idempotencyKey: 'auto-1', // send 100 HTG
     });
 
     const p = (await payoutStore.list())[0]!;

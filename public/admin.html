@@ -120,9 +120,15 @@
 
       <div class="panel">
         <h2>💸 Pagamentos Haiti (payouts)</h2>
-        <div class="body" style="max-height:260px; overflow:auto">
+        <div class="body" style="max-height:300px; overflow:auto">
+          <div style="margin-bottom:10px; display:flex; gap:18px; align-items:center; flex-wrap:wrap">
+            <b>Envio automático:</b>
+            <label style="cursor:pointer"><input type="checkbox" id="autoMoncash" onchange="setAuto('moncash', this.checked)"> MonCash</label>
+            <label style="cursor:pointer"><input type="checkbox" id="autoNatcash" onchange="setAuto('natcash', this.checked)"> NatCash</label>
+            <span class="muted" style="font-size:11px">Marcado = paga automático na hora. Desmarcado = fica na lista pra pagar manual.</span>
+          </div>
           <table><thead><tr><th>correlationId</th><th>destinatário</th><th class="num">valor</th><th>status</th></tr></thead><tbody id="payouts"></tbody></table>
-          <div class="muted" style="margin-top:8px">Pague no Haiti (Natcash/MonCash) e use <b>Liberar pagamento (manual)</b> nas Operações com o correlationId pra dar baixa.</div>
+          <div class="muted" style="margin-top:8px">Se um serviço estiver <b>desmarcado</b>, pague no Haiti (Natcash/MonCash) e use <b>Liberar pagamento (manual)</b> nas Operações com o correlationId pra dar baixa.</div>
         </div>
       </div>
 
@@ -203,6 +209,10 @@ async function p2pResolve(id, action) {
 }
 const chipFor = (t) => ({transfer:'blue',payout:'em',cash_in:'em',cash_out:'amber',fund_wallet:'gray',float_topup:'gray'}[t] || 'gray');
 const kycChip = (s) => ({approved:'em',pending:'amber',review:'gold',rejected:'red'}[s] || 'gray');
+async function setAuto(rail, enabled) {
+  try { await api('POST','/payouts/auto',{rail, enabled}); toast('✓ '+rail+': envio '+(enabled?'AUTOMÁTICO':'MANUAL')); }
+  catch (e) { toast(e.message, true); refresh(); }
+}
 
 async function refresh() {
   try {
@@ -244,6 +254,9 @@ async function refresh() {
 
     // Payouts (Haiti) — always-wired endpoint; ignore if unavailable.
     try {
+      const auto = await api('GET','/payouts/auto').catch(()=>({}));
+      if ($('autoMoncash')) $('autoMoncash').checked = !!auto.moncash;
+      if ($('autoNatcash')) $('autoNatcash').checked = !!auto.natcash;
       const payouts = await api('GET','/payouts');
       const pstatus = (s) => ({created:'amber',submitted:'gold',settled:'em',reversed:'red'}[s] || 'gray');
       $('payouts').innerHTML = payouts.map(p => `<tr><td class="mono" style="font-size:11px">${p.correlationId}</td>
