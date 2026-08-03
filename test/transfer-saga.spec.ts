@@ -76,9 +76,9 @@ describe('TransferService saga', () => {
   it('AUTO-submits the payout when the rail toggle is ON', async () => {
     const ledger = await fundedLedger();
     const payoutStore = new InMemoryPayoutStore();
-    const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
-    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, undefined, await autoOn('natcash'));
-    const r = await svc.initiate({ ...ARGS, payoutRail: 'natcash' });
+    const payouts = new PayoutService(new FakePort(), payoutStore, ledger); // FakePort serves 'moncash'
+    const svc = new TransferService(ledger, new InMemoryTransferStore(), payouts, undefined, await autoOn('moncash'));
+    const r = await svc.initiate({ ...ARGS, payoutRail: 'moncash' }); // rail matches the wired port
 
     const payoutsList = await payoutStore.list();
     expect(payoutsList).toHaveLength(1);
@@ -91,8 +91,19 @@ describe('TransferService saga', () => {
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
     // no settings store -> auto is off -> payout must NOT be submitted (Jean's manual fallback)
-    await new TransferService(ledger, new InMemoryTransferStore(), payouts).initiate({ ...ARGS, payoutRail: 'natcash' });
+    await new TransferService(ledger, new InMemoryTransferStore(), payouts).initiate({ ...ARGS, payoutRail: 'moncash' });
     expect((await payoutStore.list())[0]!.status).toBe('created');
+  });
+
+  it('does NOT auto-disburse when the transfer rail differs from the wired port (no wrong-rail misroute)', async () => {
+    const ledger = await fundedLedger();
+    const payoutStore = new InMemoryPayoutStore();
+    const payouts = new PayoutService(new FakePort(), payoutStore, ledger); // wired port serves 'moncash'
+    // NatCash auto is ON and the transfer IS natcash — but the only wired port is MonCash.
+    // Pushing it through the MonCash port would misdeliver: guard must keep it manual.
+    await new TransferService(ledger, new InMemoryTransferStore(), payouts, undefined, await autoOn('natcash'))
+      .initiate({ ...ARGS, payoutRail: 'natcash' });
+    expect((await payoutStore.list())[0]!.status).toBe('created'); // stayed manual — money safe
   });
 
   it('EXECUTES a same-currency Haiti HTG->HTG transfer: rate 1, fees applied, ledger balanced, no minting', async () => {
@@ -103,11 +114,11 @@ describe('TransferService saga', () => {
     const store = new InMemoryTransferStore();
     const payoutStore = new InMemoryPayoutStore();
     const payouts = new PayoutService(new FakePort(), payoutStore, ledger);
-    const svc = new TransferService(ledger, store, payouts, rates, await autoOn('natcash'));
+    const svc = new TransferService(ledger, store, payouts, rates, await autoOn('moncash')); // FakePort serves 'moncash'
 
     const r = await svc.initiate({
       senderId: 'ht', recipientRef: '50912345678', fromCurrency: 'HTG', toCurrency: 'HTG',
-      payoutRail: 'natcash', sendMinor: 10000n, idempotencyKey: 'htg-dom-1', // send 100 HTG
+      payoutRail: 'moncash', sendMinor: 10000n, idempotencyKey: 'htg-dom-1', // send 100 HTG
     });
 
     expect(r.status).toBe('completed');            // the saga runs to completion for from===to

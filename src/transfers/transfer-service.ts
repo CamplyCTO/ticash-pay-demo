@@ -128,7 +128,17 @@ export class TransferService {
         // idempotent: a provider failure leaves the payout in created/submitted (money safe
         // in payout_suspense) for retry/admin — it never blocks or throws.
         const rail = t.payoutRail ?? '';
-        const autoOn = !!rail && (await this.settings?.get(autoDisburseKey(rail))) === '1';
+        // Auto-disburse ONLY when BOTH hold:
+        //  (a) the admin enabled auto for THIS rail, and
+        //  (b) the wired payout port actually serves this rail (rail === port.name).
+        // Guard (b) prevents a wrong-rail misroute: the app defaults the rail to
+        // 'moncash', but the only wired port may be BenCash/NatCash — auto-pushing a
+        // MonCash transfer through the NatCash channel would misdeliver real money. On a
+        // mismatch the payout stays `created` for manual release.
+        const autoOn =
+          !!rail &&
+          rail === this.payouts.railName &&
+          (await this.settings?.get(autoDisburseKey(rail))) === '1';
         if (autoOn) {
           try {
             const sub = await this.payouts.submit(correlationId);

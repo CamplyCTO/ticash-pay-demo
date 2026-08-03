@@ -21,6 +21,13 @@ export class PayoutService {
     private readonly ledger: LedgerService,
   ) {}
 
+  /** The rail the configured payout port actually serves ('natcash' | 'moncash'), or
+   *  undefined when no port is wired. Callers use this to refuse auto-disbursing a
+   *  transfer through a port that serves a DIFFERENT rail (a wrong-rail misroute). */
+  get railName(): string | undefined {
+    return this.port?.name;
+  }
+
   /** Record the outbound leg of a transfer (status `created`). Idempotent per transfer.
    *  `providerFeeMinor` (the rail's cut on the gross payout) is LOCKED here and later
    *  split out of the settlement so the ledger records the real provider cost. */
