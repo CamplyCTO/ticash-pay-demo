@@ -81,6 +81,22 @@ export class NatcashPayoutAdapter implements PayoutPort {
   }
 
   /**
+   * DIAGNOSTIC: perform ONLY the `requestcashin` inquiry (API 1) and return BenCash's raw
+   * response. It does NOT call `confirmcashin` (API 2), so NO money moves — this is the
+   * fee/recipient/signature validation step BenCash asks us to "run again" after a key
+   * change. Never throws: connectivity/HTTP errors are returned in the result.
+   */
+  async probeRequestCashin(req: PayoutRequest): Promise<{ ok: boolean; response: unknown }> {
+    try {
+      const { body } = this.buildRequestCashin(req);
+      const resp = await this.post('requestcashin', body);
+      return { ok: resp?.resultCode === '200', response: resp };
+    } catch (e) {
+      return { ok: false, response: { error: String((e as Error)?.message ?? e) } };
+    }
+  }
+
+  /**
    * The BenCash doc exposes no status endpoint; a confirmed payout is final and we
    * only reach getStatus after a successful sendPayout, so report success.
    */

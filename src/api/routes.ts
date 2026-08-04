@@ -581,5 +581,22 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         observedResult: 'On live POST, BenCash returns HTTP 500 with an empty body.',
       };
     });
+
+    // TEMP DIAGNOSTIC (remove after go-live): actually POST requestcashin (API 1 — an
+    // inquiry that validates recipient/fee/signature and returns a txId; NO money moves,
+    // confirmcashin is never called) so we can see BenCash's real response after the key
+    // change — exactly what they asked us to "run again".
+    app.post('/diag/natcash-requestcashin', async (req) => {
+      const b = z
+        .object({ recipient: z.string().min(3), amountHtg: z.coerce.number().positive(), correlationId: z.string().optional() })
+        .parse(req.body);
+      const out = await new NatcashPayoutAdapter(config.natcash).probeRequestCashin({
+        correlationId: b.correlationId ?? 'diag-probe',
+        recipientRef: b.recipient,
+        amountMinor: toMinor(String(b.amountHtg), 'HTG'),
+        currency: 'HTG',
+      });
+      return out;
+    });
   }
 }
