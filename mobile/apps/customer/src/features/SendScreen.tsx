@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, Divider, EmptyState, Input, Row, Screen, Text, useTheme, useToast } from '@ticash/ui';
 import { formatMoneyParts, isCustomerMe, symbolOf, type Currency, type PayoutRail, type TransferPricing } from '@ticash/api-client';
 import { useI18n } from '@ticash/i18n';
-import { messageForError, useMe, useQuote, useSendTransfer } from '@ticash/core';
+import { messageForError, useMe, useQuote, useRecipientLookup, useSendTransfer } from '@ticash/core';
 import { currencyForCountry } from './auth/countries';
 
 // Ticash remits to Haiti; payout via MonCash / NatCash. Source currency follows
@@ -24,11 +24,24 @@ export function SendScreen() {
   const [amount, setAmount] = useState('');
   const [debounced, setDebounced] = useState('');
   const [recipient, setRecipient] = useState('');
+  const [debouncedRecipient, setDebouncedRecipient] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [rail, setRail] = useState<PayoutRail>('moncash');
   const send = useSendTransfer();
 
   const railApplies = to === 'HTG'; // MonCash/NatCash are Haiti mobile-money rails
+
+  // NatCash resolves the account holder's name from the number (BenCash requirement) —
+  // debounce the number, look it up, and auto-fill the confirmed name.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedRecipient(recipient), 500);
+    return () => clearTimeout(id);
+  }, [recipient]);
+  const lookup = useRecipientLookup(debouncedRecipient, rail, railApplies);
+  const resolvedName = lookup.data?.valid ? lookup.data.name : null;
+  useEffect(() => {
+    if (resolvedName) setRecipientName(resolvedName);
+  }, [resolvedName]);
 
   // Stable idempotency key per logical send: same (corridor, amount, recipient) ->
   // same key, so a retry after a lost response can never double-send money. A new
@@ -127,8 +140,26 @@ export function SendScreen() {
         onChangeText={setRecipient}
         placeholder="50912345678"
         keyboardType="default"
-        containerStyle={{ marginBottom: railApplies ? t.spacing(4) : t.spacing(5) }}
+        containerStyle={{ marginBottom: t.spacing(1) }}
       />
+
+      {/* NatCash: show the resolved account holder name for confirmation before sending. */}
+      {railApplies && rail === 'natcash' && recipientValid ? (
+        <View style={{ marginBottom: t.spacing(4), minHeight: t.spacing(5), justifyContent: 'center' }}>
+          {lookup.isFetching || debouncedRecipient !== recipient ? (
+            <Text variant="caption" color="textMuted">{tr('send.verifying')}</Text>
+          ) : resolvedName ? (
+            <Row gap={1} style={{ alignItems: 'center' }}>
+              <Ionicons name="checkmark-circle" size={16} color={t.colors.primary} />
+              <Text variant="caption" weight="semibold" color="primary">{resolvedName}</Text>
+            </Row>
+          ) : lookup.data && !lookup.data.valid ? (
+            <Text variant="caption" color="danger">{tr('send.recipientNotFound')}</Text>
+          ) : null}
+        </View>
+      ) : (
+        <View style={{ marginBottom: t.spacing(3) }} />
+      )}
 
       {/* Haiti payout rail: MonCash / NatCash */}
       {railApplies ? (

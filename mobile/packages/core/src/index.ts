@@ -10,6 +10,7 @@ export {
   useKycLimits,
   useAirtimeProducts,
   useSendTransfer,
+  useRecipientLookup,
   useAirtimeTopup,
   useKycStart,
   useDepositPix,

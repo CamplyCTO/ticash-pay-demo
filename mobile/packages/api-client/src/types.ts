@@ -97,6 +97,13 @@ export interface TransferResult {
 
 export type PayoutRail = 'moncash' | 'natcash';
 
+/** Recipient resolved from the payout rail for a pre-send name confirmation. */
+export interface RecipientInfo {
+  valid: boolean;
+  name: string | null;
+  currency: string | null;
+}
+
 export interface TxRow {
   transactionUid: string;
   type: string;

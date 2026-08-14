@@ -14,6 +14,7 @@ import {
   type P2POrder,
   type PublicUser,
   type RateQuote,
+  type RecipientInfo,
   type SendTransferInput,
   type TransferPricing,
   type TransferResult,
@@ -113,6 +114,12 @@ export class TicashApi {
   // Send: cross-currency transfer (sender = the authenticated caller).
   sendTransfer(input: SendTransferInput): Promise<TransferResult> {
     return this.request('POST', '/app/transfers', { auth: true, body: input });
+  }
+
+  // Resolve the payout recipient's registered name (NatCash) so the UI can show it for
+  // confirmation BEFORE sending. Inquiry only — no money moves.
+  lookupRecipient(recipient: string): Promise<RecipientInfo> {
+    return this.request('POST', '/app/payout/lookup', { auth: true, body: { recipient } });
   }
 
   // History: the caller's own transactions.

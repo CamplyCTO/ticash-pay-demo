@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, SendTransferInput, TransferPricing, TxRow, WithdrawalRequest } from '@ticash/api-client';
+import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, PayoutRail, RecipientInfo, SendTransferInput, TransferPricing, TxRow, WithdrawalRequest } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -31,6 +31,20 @@ export function useQuote(from: Currency, to: Currency, amount: string) {
     queryFn: () => api.priceTransfer(from, to, amount),
     enabled,
     staleTime: 10_000,
+  });
+}
+
+/** Resolve the payout recipient's registered name (NatCash) for a pre-send confirmation.
+ *  Only runs for the NatCash rail with a plausible number; debounce `recipient` in the UI. */
+export function useRecipientLookup(recipient: string, rail: PayoutRail, active: boolean) {
+  const ref = recipient.trim();
+  const enabled = useAuthed() && active && rail === 'natcash' && ref.length >= 5;
+  return useQuery<RecipientInfo>({
+    queryKey: ['recipient-lookup', ref],
+    queryFn: () => api.lookupRecipient(ref),
+    enabled,
+    staleTime: 60_000,
+    retry: 0,
   });
 }
 

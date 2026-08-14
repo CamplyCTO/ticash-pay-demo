@@ -1,7 +1,7 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { fromMinor } from '../money/money';
 import { HttpClient, fetchHttpClient } from '../payments/types';
-import { PayoutPort, PayoutRequest, PayoutStatusResult, PayoutSubmitResult } from './types';
+import { PayoutPort, PayoutRequest, PayoutStatusResult, PayoutSubmitResult, RecipientInfo } from './types';
 
 /**
  * Natcash payout via BenCash "Deposit Channel" (Haiti). A payout is a two-call
@@ -102,6 +102,27 @@ export class NatcashPayoutAdapter implements PayoutPort {
    */
   async getStatus(_providerRef: string): Promise<PayoutStatusResult> {
     return { state: 'success', raw: { note: 'natcash payout is synchronous (confirmed at send)' } };
+  }
+
+  /**
+   * Resolve a NatCash recipient's registered account name for a PRE-SEND confirmation
+   * (BenCash requires showing the name when the number is entered). Runs the
+   * `requestcashin` INQUIRY only — NO money moves, `confirmcashin` is never called — with
+   * a nominal WHOLE-gourde amount and a FRESH correlationId so it never collides with a
+   * real payout or a prior lookup ("Invalid requestId, already exists"). Returns valid=false
+   * (never throws for a bad number) so the app can just hide the name.
+   */
+  async verifyRecipient(recipient: string): Promise<RecipientInfo> {
+    const probe = await this.probeRequestCashin({
+      correlationId: `lookup:${randomUUID()}`,
+      recipientRef: recipient,
+      amountMinor: 10000n, // nominal 100 HTG (whole) — only to resolve the recipient
+      currency: 'HTG',
+    });
+    const resp = probe.response as { result?: { receiver?: { accountName?: string; accountCurrency?: string } } };
+    const receiver = resp?.result?.receiver;
+    const name = receiver?.accountName?.trim() || null;
+    return { valid: probe.ok && !!name, name, currency: receiver?.accountCurrency ?? null };
   }
 
   // --- helpers --------------------------------------------------------------

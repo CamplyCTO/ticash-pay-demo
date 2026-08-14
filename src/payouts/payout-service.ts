@@ -1,7 +1,7 @@
 import { LedgerService } from '../ledger/service';
 import { TransferQuote } from '../ledger/operations';
 import { PayoutRecord, PayoutReversalContext, PayoutStore } from './payout-store';
-import { PayoutPort } from './types';
+import { PayoutPort, RecipientInfo } from './types';
 
 /**
  * Drives the payout state machine, the bridge between the payout rail and the ledger:
@@ -26,6 +26,18 @@ export class PayoutService {
    *  transfer through a port that serves a DIFFERENT rail (a wrong-rail misroute). */
   get railName(): string | undefined {
     return this.port?.name;
+  }
+
+  /** Whether the wired rail can resolve a recipient's name for a pre-send confirmation. */
+  get canVerifyRecipient(): boolean {
+    return typeof this.port?.verifyRecipient === 'function';
+  }
+
+  /** Resolve a recipient's registered name for a pre-send confirmation (NO money moves).
+   *  Returns valid=false when no rail is wired or the rail can't look up. */
+  async verifyRecipient(recipient: string): Promise<RecipientInfo> {
+    if (!this.port?.verifyRecipient) return { valid: false, name: null, currency: null };
+    return this.port.verifyRecipient(recipient);
   }
 
   /** Record the outbound leg of a transfer (status `created`). Idempotent per transfer.

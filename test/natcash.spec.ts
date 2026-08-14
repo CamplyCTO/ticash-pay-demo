@@ -66,4 +66,29 @@ describe('NatcashPayoutAdapter', () => {
     const r = await new NatcashPayoutAdapter(cfg, new FakeHttp(okHandler)).getStatus('TXN-1');
     expect(r.state).toBe('success');
   });
+
+  it('verifyRecipient resolves the account name via inquiry only (no confirmcashin, whole-gourde amount)', async () => {
+    const http = new FakeHttp((r) =>
+      r.url.endsWith('/requestcashin')
+        ? { status: 200, body: JSON.stringify({ resultCode: '200', message: 'Success', result: { txId: 'tx-9', receiver: { accountName: 'BENOIT WARMPS NEWLEE', accountCurrency: 'HTG' } } }) }
+        : { status: 200, body: '{}' },
+    );
+    const info = await new NatcashPayoutAdapter(cfg, http).verifyRecipient('50935434168');
+    expect(info).toEqual({ valid: true, name: 'BENOIT WARMPS NEWLEE', currency: 'HTG' });
+    // inquiry ONLY — the money step (confirmcashin) is never called
+    expect(http.calls.some((c) => c.url.endsWith('/confirmcashin'))).toBe(false);
+    // and the inquiry amount is a WHOLE gourde (BenCash rejects cents)
+    expect(JSON.parse(http.calls[0]!.body!).amount).toBe(100);
+  });
+
+  it('verifyRecipient returns valid:false for an unrecognised number (no name)', async () => {
+    const http = new FakeHttp((r) =>
+      r.url.endsWith('/requestcashin')
+        ? { status: 200, body: JSON.stringify({ resultCode: '400', message: 'Invalid requestId, already exists', result: { receiver: { accountName: '', accountCurrency: 'HTG' } } }) }
+        : { status: 200, body: '{}' },
+    );
+    const info = await new NatcashPayoutAdapter(cfg, http).verifyRecipient('50937000000');
+    expect(info.valid).toBe(false);
+    expect(info.name).toBeNull();
+  });
 });

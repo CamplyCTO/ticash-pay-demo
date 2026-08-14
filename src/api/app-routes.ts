@@ -248,6 +248,21 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
     return result;
   });
 
+  // ---- Recipient name lookup: resolve the payout account holder's name so the app can
+  // show it for confirmation BEFORE sending (BenCash/NatCash requirement). Inquiry only —
+  // NO money moves. Auth-scoped; never throws for a bad number (returns valid:false).
+  if (deps.payouts) {
+    app.post('/app/payout/lookup', async (req) => {
+      await requireCustomer(req);
+      const b = z.object({ recipient: z.string().trim().min(4).max(20) }).parse(req.body);
+      try {
+        return await deps.payouts!.service.verifyRecipient(b.recipient);
+      } catch {
+        return { valid: false, name: null, currency: null };
+      }
+    });
+  }
+
   // ---- History: the caller's own transactions (across their wallets) ------
   app.get('/app/transactions', async (req) => {
     const me = appUserOf(req);

@@ -25,8 +25,19 @@ export interface PayoutStatusResult {
   raw: unknown;
 }
 
+/** A recipient resolved from the rail for a pre-send name confirmation (no money moves). */
+export interface RecipientInfo {
+  valid: boolean; // the rail recognised this account
+  name: string | null; // registered account holder name, when available
+  currency: string | null;
+}
+
 export interface PayoutPort {
   readonly name: string;
   sendPayout(req: PayoutRequest): Promise<PayoutSubmitResult>;
   getStatus(providerRef: string): Promise<PayoutStatusResult>;
+  /** OPTIONAL: resolve the recipient's registered name for a pre-send confirmation
+   *  (BenCash/NatCash requires showing the name when the number is entered). Rails that
+   *  cannot look up simply omit this method. Never moves money. */
+  verifyRecipient?(recipient: string): Promise<RecipientInfo>;
 }
