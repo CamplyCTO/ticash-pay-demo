@@ -1,5 +1,5 @@
 import { Currency } from '../money/currency';
-import { convert } from '../money/money';
+import { convert, floorToPayoutUnit } from '../money/money';
 import { LedgerError } from './engine';
 import { AccountSpec, JournalDraft, PostingDraft } from './types';
 
@@ -204,7 +204,15 @@ export function quoteTransfer(args: {
   feeMinor: bigint;
   rate: string;
 }): TransferQuote {
-  const receiveMinor = convert(args.sendMinor, args.fromCurrency, args.toCurrency, args.rate);
+  // Round the recipient amount DOWN to the destination rail's payout unit (whole gourdes
+  // for HTG — Haitian mobile money rejects fractional amounts). This is the single money
+  // chokepoint: `receiveMinor` funds the FX journal AND is the exact amount sent to the
+  // payout rail, so rounding here keeps the quote, the ledger, and the payout identical
+  // and balanced (Σ=0). The <1-gourde remainder stays as platform FX margin.
+  const receiveMinor = floorToPayoutUnit(
+    convert(args.sendMinor, args.fromCurrency, args.toCurrency, args.rate),
+    args.toCurrency,
+  );
   return {
     sendMinor: args.sendMinor,
     feeMinor: args.feeMinor,

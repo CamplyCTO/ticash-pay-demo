@@ -24,6 +24,18 @@ export function scaleOf(currency: Currency): number {
   return CURRENCIES[currency].scale;
 }
 
+/**
+ * Minor-unit granularity a currency's payout rails accept. Haitian mobile-money rails
+ * (NatCash via BenCash, and MonCash) accept ONLY whole gourdes — a fractional amount is
+ * rejected by BenCash with a MISLEADING error ("Invalid phone number" / "requestId
+ * already exists"), which cost real payouts (see stuck decimal payouts Aug 2026). So an
+ * HTG payout must be a multiple of 1 gourde (10^scale = 100 minor). Every other currency
+ * transacts at full minor precision (step 1n).
+ */
+export function payoutMinorStep(currency: Currency): bigint {
+  return currency === 'HTG' ? 10n ** BigInt(CURRENCIES.HTG.scale) : 1n;
+}
+
 export function assertCurrency(value: string): Currency {
   if (!isCurrency(value)) {
     throw new Error(`Unsupported currency: ${value}`);

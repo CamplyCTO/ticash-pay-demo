@@ -36,11 +36,11 @@ describe('RateService.priceTransfer — full economics', () => {
   it('breaks down send/payout/provider-fee/net/profit (loss when margin < provider fee)', async () => {
     const p = await new RateService(store()).priceTransfer('BRL', 'HTG', 10000n); // R$100, margin 2%, provider 3.35%
     expect(p.rate).toBe('23.8728');
-    expect(p.grossPayoutMinor).toBe(238728n); // 2387.28 HTG at customer rate
-    expect(p.providerFeeMinor).toBe(7997n); // 3.35% of gross
-    expect(p.netToRecipientMinor).toBe(230731n); // recipient gets this
-    expect(p.fxMarginMinor).toBe(4872n); // platform FX revenue (2% of 2436)
-    expect(p.platformNetProfitMinor).toBe(-3125n); // LOSS: 2% margin < 3.35% provider fee
+    expect(p.grossPayoutMinor).toBe(238700n); // 2387.00 HTG — floored to whole gourdes (HTG rail rejects cents)
+    expect(p.providerFeeMinor).toBe(7996n); // 3.35% of the whole-gourde gross
+    expect(p.netToRecipientMinor).toBe(230704n); // recipient gets this
+    expect(p.fxMarginMinor).toBe(4900n); // platform FX revenue (2% of 2436 + the <1-gourde rounding gain)
+    expect(p.platformNetProfitMinor).toBe(-3096n); // LOSS: 2% margin < 3.35% provider fee
   });
 
   it('shows a profit once margin/fee exceed the provider fee', async () => {
@@ -125,7 +125,7 @@ describe('FX HTTP endpoints', () => {
   it('GET /fx/quote?amount returns the full economic breakdown', async () => {
     const r = await (app().inject({ method: 'GET', url: '/fx/quote?from=BRL&to=HTG&amount=100.00' } as never) as any);
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toMatchObject({ rate: '23.8728', grossPayoutMinor: '238728', providerFeeMinor: '7997', netToRecipientMinor: '230731', platformNetProfitMinor: '-3125' });
+    expect(r.json()).toMatchObject({ rate: '23.8728', grossPayoutMinor: '238700', providerFeeMinor: '7996', netToRecipientMinor: '230704', platformNetProfitMinor: '-3096' });
   });
 
   it('POST /fx/rates sets margin + fees', async () => {

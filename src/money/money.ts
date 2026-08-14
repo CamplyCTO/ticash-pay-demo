@@ -1,4 +1,4 @@
-import { Currency, scaleOf } from './currency';
+import { Currency, payoutMinorStep, scaleOf } from './currency';
 
 /**
  * Money is always represented as BigInt minor units. No floating point ever
@@ -77,6 +77,21 @@ export function convert(
   const numerator = fromMinorAmount * rateScaled * pow10(toScale);
   const denominator = pow10(fromScale) * pow10(rateScale);
   return roundHalfUpDiv(numerator, denominator);
+}
+
+/**
+ * Round a NON-NEGATIVE destination amount DOWN to the currency's payout granularity
+ * (e.g. whole gourdes for HTG — see `payoutMinorStep`). Floor toward zero so we never
+ * deliver or promise money that wasn't funded; the sub-unit remainder (< 1 gourde)
+ * stays as platform FX margin. A no-op for full-precision currencies (step 1).
+ */
+export function floorToPayoutUnit(minor: bigint, currency: Currency): bigint {
+  const step = payoutMinorStep(currency);
+  // Pass non-positive amounts through UNCHANGED so the ledger's dedicated "must be
+  // positive" guard (debit/credit) still fires with its own message — we never want the
+  // rounding to preempt that validation.
+  if (step <= 1n || minor <= 0n) return minor;
+  return minor - (minor % step);
 }
 
 /** Integer division rounding half away from zero. */

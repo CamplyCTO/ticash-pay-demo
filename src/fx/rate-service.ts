@@ -1,5 +1,5 @@
 import { Currency } from '../money/currency';
-import { convert, roundHalfUpDiv } from '../money/money';
+import { convert, floorToPayoutUnit, roundHalfUpDiv } from '../money/money';
 import { LedgerError } from '../ledger/engine';
 import { RateQuote, RateRecord, RateStore, TransferPricing } from './types';
 
@@ -75,7 +75,7 @@ export class RateService {
       const platformFeeBps = rec?.platformFeeBps ?? 0;
       const providerFeeBps = rec?.providerFeeBps ?? 0;
       const platformFeeMinor = applyBps(sendMinor, platformFeeBps); // same ccy
-      const grossPayoutMinor = sendMinor; // rate 1
+      const grossPayoutMinor = floorToPayoutUnit(sendMinor, to); // rate 1, whole payout unit
       const providerFeeMinor = applyBps(grossPayoutMinor, providerFeeBps); // payout rail cut
       return {
         fromCurrency: from, toCurrency: to, rate: '1', midRate: '1',
@@ -93,7 +93,10 @@ export class RateService {
     const rate = marginedRate(rec.midRate, rec.marginBps);
 
     const platformFeeMinor = applyBps(sendMinor, rec.platformFeeBps); // source ccy
-    const grossPayoutMinor = convert(sendMinor, from, to, rate); // dest ccy (customer rate)
+    // Round the payout DOWN to the rail's whole unit (whole gourdes for HTG) so the quoted
+    // economics match the exact amount sent to the rail. Keep the mid conversion unrounded
+    // so the <1-unit rounding gain surfaces as platform FX margin (fxMarginMinor), not a leak.
+    const grossPayoutMinor = floorToPayoutUnit(convert(sendMinor, from, to, rate), to); // dest ccy (customer rate)
     const grossAtMidMinor = convert(sendMinor, from, to, rec.midRate); // dest ccy (mid)
     const fxMarginMinor = grossAtMidMinor - grossPayoutMinor; // platform FX revenue (dest)
     const providerFeeMinor = applyBps(grossPayoutMinor, rec.providerFeeBps); // dest ccy (cost)
