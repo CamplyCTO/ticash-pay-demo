@@ -60,7 +60,7 @@ export const en = {
   send: {
     title: 'Send', destination: 'Destination', youSend: 'You send', recipient: 'Recipient number',
     recipientName: 'Recipient name', recipientNamePlaceholder: 'Full name', rail: 'How they receive',
-    verifying: 'Checking recipient…', recipientNotFound: 'NatCash number not found — check it',
+    verifying: 'Checking recipient…', recipientNotFound: 'NatCash number not found — check it', verifyError: 'Couldn’t verify right now — try again',
     rate: 'Exchange rate', fee: 'Fee', youPay: 'You pay', recipientGets: 'Recipient gets',
     enterAmount: 'Enter an amount to see the quote', noRate: 'No rate for this corridor',
     sameCountry: 'Your account is in Haiti. Ticash sends money TO Haiti from abroad — a Haiti account receives transfers and can trade USDT. To send a remittance, use an account in Brazil, the US, Mexico, or the Dominican Republic.',
@@ -152,7 +152,7 @@ export const pt: Dictionary = {
   send: {
     title: 'Enviar', destination: 'Destino', youSend: 'Você envia', recipient: 'Número do destinatário',
     recipientName: 'Nome do destinatário', recipientNamePlaceholder: 'Nome completo', rail: 'Como recebe',
-    verifying: 'Verificando destinatário…', recipientNotFound: 'Número NatCash não encontrado — confira',
+    verifying: 'Verificando destinatário…', recipientNotFound: 'Número NatCash não encontrado — confira', verifyError: 'Não foi possível verificar agora — tente de novo',
     rate: 'Taxa de câmbio', fee: 'Taxa', youPay: 'Você paga', recipientGets: 'Destinatário recebe',
     enterAmount: 'Digite um valor para ver a cotação', noRate: 'Sem cotação para este trajeto',
     sameCountry: 'Sua conta é do Haiti. A Ticash envia dinheiro PARA o Haiti a partir do exterior — uma conta do Haiti recebe transferências e pode negociar USDT. Para enviar uma remessa, use uma conta no Brasil, EUA, México ou Rep. Dominicana.',
@@ -239,7 +239,7 @@ export const fr: Dictionary = {
   send: {
     title: 'Envoyer', destination: 'Destination', youSend: 'Vous envoyez', recipient: 'Numéro du destinataire',
     recipientName: 'Nom du destinataire', recipientNamePlaceholder: 'Nom complet', rail: 'Mode de réception',
-    verifying: 'Vérification du destinataire…', recipientNotFound: 'Numéro NatCash introuvable — vérifiez',
+    verifying: 'Vérification du destinataire…', recipientNotFound: 'Numéro NatCash introuvable — vérifiez', verifyError: 'Vérification impossible pour le moment — réessayez',
     rate: 'Taux de change', fee: 'Frais', youPay: 'Vous payez', recipientGets: 'Le destinataire reçoit',
     enterAmount: 'Saisissez un montant pour voir le devis', noRate: 'Aucun taux pour ce corridor',
     sameCountry: 'Votre compte est au Haïti. Ticash envoie de l’argent VERS Haïti depuis l’étranger — un compte haïtien reçoit des transferts et peut échanger de l’USDT. Pour envoyer une remise, utilisez un compte au Brésil, aux États-Unis, au Mexique ou en Rép. dominicaine.',

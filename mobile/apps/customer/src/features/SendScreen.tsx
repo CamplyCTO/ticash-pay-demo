@@ -153,6 +153,8 @@ export function SendScreen() {
               <Ionicons name="checkmark-circle" size={16} color={t.colors.primary} />
               <Text variant="caption" weight="semibold" color="primary">{resolvedName}</Text>
             </Row>
+          ) : lookup.data?.error || lookup.isError ? (
+            <Text variant="caption" color="textMuted">{tr('send.verifyError')}</Text>
           ) : lookup.data && !lookup.data.valid ? (
             <Text variant="caption" color="danger">{tr('send.recipientNotFound')}</Text>
           ) : null}

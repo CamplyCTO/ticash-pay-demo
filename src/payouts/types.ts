@@ -30,6 +30,10 @@ export interface RecipientInfo {
   valid: boolean; // the rail recognised this account
   name: string | null; // registered account holder name, when available
   currency: string | null;
+  /** True when the lookup could NOT complete (rail down / connection / server error) — as
+   *  opposed to a genuine "no such account". Lets the UI say "couldn't verify now" instead of
+   *  wrongly telling the user the number is invalid (e.g. during a BenCash key desync). */
+  error?: boolean;
 }
 
 export interface PayoutPort {

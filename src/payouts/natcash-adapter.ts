@@ -119,10 +119,16 @@ export class NatcashPayoutAdapter implements PayoutPort {
       amountMinor: 10000n, // nominal 100 HTG (whole) — only to resolve the recipient
       currency: 'HTG',
     });
-    const resp = probe.response as { result?: { receiver?: { accountName?: string; accountCurrency?: string } } };
+    const resp = probe.response as { resultCode?: string; error?: string; result?: { receiver?: { accountName?: string; accountCurrency?: string } } };
     const receiver = resp?.result?.receiver;
     const name = receiver?.accountName?.trim() || null;
-    return { valid: probe.ok && !!name, name, currency: receiver?.accountCurrency ?? null };
+    if (probe.ok && name) return { valid: true, name, currency: receiver?.accountCurrency ?? null };
+    // Distinguish a SERVICE failure (connection error, or a 5xx like the "Invalid PrivateKey"
+    // key-desync) from a genuine "no such account" (a clean 4xx recipient rejection) so the app
+    // can say "couldn't verify now" instead of wrongly claiming the number is invalid.
+    const rc = resp?.resultCode ?? '';
+    const serviceError = !!resp?.error || rc === '' || rc.startsWith('5');
+    return { valid: false, name: null, currency: receiver?.accountCurrency ?? null, error: serviceError };
   }
 
   // --- helpers --------------------------------------------------------------

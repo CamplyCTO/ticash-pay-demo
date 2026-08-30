@@ -102,6 +102,8 @@ export interface RecipientInfo {
   valid: boolean;
   name: string | null;
   currency: string | null;
+  /** True when the lookup couldn't complete (rail down / server error) vs a genuine not-found. */
+  error?: boolean;
 }
 
 export interface TxRow {

@@ -258,7 +258,7 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       try {
         return await deps.payouts!.service.verifyRecipient(b.recipient);
       } catch {
-        return { valid: false, name: null, currency: null };
+        return { valid: false, name: null, currency: null, error: true };
       }
     });
   }
