@@ -131,7 +131,13 @@ export function defaultDeps(): ServerDeps {
     deps.screening = { service: new ScreeningService(DEFAULT_SANCTIONS, createScreeningStore(), config.screening.threshold) };
   }
   if (config.dingconnect.enabled) {
-    deps.airtime = { service: new AirtimeService(new DingConnectAdapter(config.dingconnect), ledger, createAirtimeMarginStore()) };
+    deps.airtime = {
+      service: new AirtimeService(
+        new DingConnectAdapter(config.dingconnect, config.dingconnect.proxyUrl ? proxiedHttpClient(config.dingconnect.proxyUrl) : undefined),
+        ledger,
+        createAirtimeMarginStore(),
+      ),
+    };
   }
   // KYC limits are always enforced; the Sumsub verification service is added when configured.
   const kycLimits = new KycLimits(deps.registry, config.kyc.limitByLevel);

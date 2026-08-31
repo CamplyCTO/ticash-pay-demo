@@ -56,6 +56,9 @@ export const config = {
     enabled: !!process.env.DINGCONNECT_API_KEY,
     base: process.env.DINGCONNECT_BASE ?? 'https://api.dingconnect.com/api/V1',
     apiKey: process.env.DINGCONNECT_API_KEY ?? '',
+    // DingConnect IP-whitelists; Render's egress rotates. Tunnel through a static-IP proxy
+    // (same mechanism as NatCash) when set — then only the proxy IP needs whitelisting.
+    proxyUrl: process.env.DINGCONNECT_PROXY_URL ?? '',
     // Default airtime margin (bps) applied to the provider cost (per-country override in DB).
     defaultMarginBps: Number(process.env.AIRTIME_MARGIN_BPS ?? 0),
   },
