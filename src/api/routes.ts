@@ -6,6 +6,7 @@ import { AccountKind, AccountSpec, OwnerType } from '../ledger/types';
 import { LedgerError } from '../ledger/engine';
 import { RegistryError } from '../registry/store';
 import { config } from '../config';
+import { proxiedHttpClient } from '../payments/types';
 import { NatcashPayoutAdapter } from '../payouts/natcash-adapter';
 import type { ServerDeps } from './server';
 
@@ -552,6 +553,21 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       return { rail: b.rail, enabled: b.enabled };
     });
   }
+
+  // TEMP DIAGNOSTIC (remove after go-live): the EGRESS IP the static-IP proxy presents to
+  // external providers. A DigitalOcean floating IP (proxy inbound) can differ from the
+  // droplet's outbound IP — so the IP to whitelist at DingConnect/BenCash is THIS one, not
+  // the proxy host in *_PROXY_URL.
+  app.get('/diag/proxy-egress-ip', async () => {
+    const proxyUrl = config.natcash.proxyUrl || config.dingconnect.proxyUrl;
+    if (!proxyUrl) return { error: 'no proxy configured' };
+    try {
+      const res = await proxiedHttpClient(proxyUrl).request({ url: 'https://ipinfo.io/ip', method: 'GET', headers: { accept: 'text/plain' } });
+      return { egressIp: (await res.text()).trim() };
+    } catch (e) {
+      return { error: String((e as Error)?.message ?? e) };
+    }
+  });
 
   // TEMP DIAGNOSTIC (remove after go-live): reproduce the EXACT requestcashin request we
   // send to BenCash — built by the real adapter code, but WITHOUT posting (no money, no
