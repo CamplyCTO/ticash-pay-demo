@@ -15,7 +15,8 @@ export interface DingConfig {
   apiKey: string;
 }
 
-const UA = 'TicashPay/1.0 (+https://ticashpay.com)';
+// DingConnect rejects non-browser User-Agents (401), so send a real browser UA (hard-won).
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 export class DingConnectAdapter implements AirtimePort {
   readonly name = 'dingconnect';
