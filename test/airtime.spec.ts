@@ -37,7 +37,7 @@ describe('DingConnectAdapter', () => {
     expect(res.providerRef).toBe('T-1');
     const call = http.calls.find((c) => c.url.endsWith('/SendTransfer'))!;
     expect(call.headers.api_key).toBe('KEY');
-    expect(call.headers['user-agent']).toMatch(/Ticash/); // WAF needs a real UA
+    expect(call.headers['user-agent']).toMatch(/Mozilla/); // DingConnect rejects non-browser UAs
     expect(JSON.parse(call.body!)).toMatchObject({ SkuCode: '4RHT10700', SendValue: 64.28, AccountNumber: '50912345678', DistributorRef: 'ref-1' });
   });
 

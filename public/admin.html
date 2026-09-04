@@ -169,6 +169,7 @@
 <script>
 const API = ''; // same origin
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const SCALE = { BRL:2, HTG:2, USD:2, DOP:2, MXN:2, USDT:6 };
 function fmt(minor, ccy) {
   const s = SCALE[ccy] ?? 2; const neg = BigInt(minor) < 0n;
@@ -244,7 +245,7 @@ async function refresh() {
     $('kpi-div').textContent = recon.cacheDivergences.length;
     $('kpi-div').style.color = recon.cacheDivergences.length ? 'var(--red)' : 'var(--emerald)';
 
-    $('customers').innerHTML = customers.map(c => `<tr><td>${c.externalId}</td>
+    $('customers').innerHTML = customers.map(c => `<tr><td><b>${c.name ? esc(c.name) : '—'}</b><div class="muted" style="font-size:11px">${c.externalId}</div></td>
       <td><span class="chip ${kycChip(c.kycStatus)}">${c.kycStatus} · L${c.kycLevel}</span></td>
       <td class="muted">${c.status}</td></tr>`).join('') || '<tr><td colspan=3 class="muted">nenhum cliente</td></tr>';
     $('agents').innerHTML = agents.map(a => `<tr><td>${a.externalId}</td>

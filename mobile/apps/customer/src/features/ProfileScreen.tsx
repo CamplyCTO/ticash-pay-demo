@@ -26,9 +26,10 @@ export function ProfileScreen() {
   return (
     <Screen scroll>
       <Row gap={4} style={{ marginVertical: t.spacing(4) }}>
-        <Avatar name={user?.phone ?? '?'} size={56} />
+        <Avatar name={user?.name || user?.phone || '?'} size={56} />
         <View style={{ flex: 1 }}>
-          <Text variant="heading">{user?.phone ?? '—'}</Text>
+          <Text variant="heading">{user?.name || user?.phone || '—'}</Text>
+          {user?.name ? <Text variant="body" color="textMuted">{user.phone}</Text> : null}
           <Text variant="caption" color="textMuted">{user?.externalId ?? ''}</Text>
         </View>
         {me?.kyc ? <Chip label={`${tr('profile.level')} ${me.kyc.level}`} tone={me.kyc.level >= 2 ? 'success' : 'warning'} /> : null}

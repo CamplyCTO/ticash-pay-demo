@@ -51,7 +51,14 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     reply.status(201);
     return registry.createCustomer(b);
   });
-  app.get('/customers', async () => registry.listCustomers());
+  app.get('/customers', async () => {
+    const customers = await registry.listCustomers();
+    if (!deps.auth) return customers;
+    // Enrich with the signup name (lives on the auth user) so the KYC review shows the real
+    // name next to the id — the operator matches it to the KYC photo. Admin-only, low volume.
+    const svc = deps.auth.service;
+    return Promise.all(customers.map(async (c) => ({ ...c, name: await svc.nameByExternalId(c.externalId) })));
+  });
   app.post('/customers/:externalId/kyc', async (req) => {
     const p = z.object({ externalId: z.string() }).parse(req.params);
     const b = z.object({ level: z.number().int().min(0).max(2), status: kycStatusSchema }).parse(req.body);

@@ -7,6 +7,10 @@ export interface PublicUser {
   role: AppRole;
   externalId: string;
   phone: string;
+  // Present on /app/me (profile); may be absent on login/verify responses.
+  name?: string | null;
+  country?: string | null;
+  email?: string | null;
 }
 
 export interface AuthTokens {

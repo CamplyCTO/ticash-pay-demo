@@ -216,6 +216,13 @@ export class AuthService {
     return u ? toPublic(u) : null;
   }
 
+  /** The signup display name for a party (customer/agent), for admin/KYC review — so the
+   *  operator can match the real name to the KYC photo, not just the synthetic id. */
+  async nameByExternalId(externalId: string): Promise<string | null> {
+    const users = await this.store.findUsersByExternalId(externalId);
+    return users.find((u) => u.name)?.name ?? users[0]?.name ?? null;
+  }
+
   // ---- internals -----------------------------------------------------------
 
   private async startSession(user: AppUser, device?: string): Promise<AuthTokens> {
