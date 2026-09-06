@@ -18,6 +18,7 @@ export function SignUpScreen() {
   const [phone, setPhone] = useState('+55');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const pickCountry = (code: string) => {
@@ -34,7 +35,7 @@ export function SignUpScreen() {
     if (!valid || loading) return;
     setLoading(true);
     try {
-      await signUp({ name: name.trim(), phone: phone.trim(), country, password, ...(email.trim() ? { email: email.trim() } : {}) });
+      await signUp({ name: name.trim(), phone: phone.trim(), country, password, ...(email.trim() ? { email: email.trim() } : {}), ...(referralCode.trim() ? { referralCode: referralCode.trim().toUpperCase() } : {}) });
       // Account created; verify the phone via OTP next.
       router.push({ pathname: '/(auth)/otp', params: { phone: phone.trim(), mode: 'verify' } });
     } catch (e) {
@@ -72,6 +73,7 @@ export function SignUpScreen() {
       <Input label={tr('auth.phoneLabel')} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="+55 11 99999-9999" containerStyle={{ marginBottom: t.spacing(4) }} />
       <Input label={`${tr('auth.email')} (${tr('common.optional')})`} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="voce@email.com" containerStyle={{ marginBottom: t.spacing(4) }} />
       <Input label={tr('auth.password')} value={password} onChangeText={setPassword} secureTextEntry placeholder={tr('auth.passwordHint')} containerStyle={{ marginBottom: t.spacing(4) }} />
+      <Input label={`${tr('auth.referralCode')} (${tr('common.optional')})`} value={referralCode} onChangeText={setReferralCode} autoCapitalize="characters" autoCorrect={false} placeholder={tr('auth.referralCodeHint')} containerStyle={{ marginBottom: t.spacing(4) }} />
 
       <Button title={tr('auth.haveAccount')} variant="ghost" onPress={() => router.replace('/(auth)/login')} />
     </Screen>

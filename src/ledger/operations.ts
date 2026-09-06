@@ -21,7 +21,7 @@ export function agentCommission(agentId: string, currency: Currency): AccountSpe
   return { ownerType: 'agent', ownerId: agentId, kind: 'agent_commission', currency };
 }
 export function systemAccount(
-  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense' | 'provider_fee' | 'withdrawal_suspense',
+  kind: 'settlement' | 'fee_revenue' | 'fx_position' | 'payout_suspense' | 'provider_fee' | 'withdrawal_suspense' | 'promo_expense',
   currency: Currency,
 ): AccountSpec {
   return { ownerType: 'system', ownerId: null, kind, currency };
@@ -75,6 +75,28 @@ export function fundWallet(args: {
     postings: [
       debit(systemAccount('settlement', currency), amountMinor),
       credit(customerWallet(customerId, currency), amountMinor),
+    ],
+  };
+}
+
+/** Referral bonus: the platform credits the referrer's wallet from a marketing
+ *  (promo_expense) account. Balanced per currency; promo_expense is a system
+ *  account that may go negative (the running marketing cost). */
+export function referralReward(args: {
+  referrerId: string;
+  currency: Currency;
+  amountMinor: bigint;
+  idempotencyKey: string;
+  externalRef?: string;
+}): JournalDraft {
+  const { referrerId, currency, amountMinor } = args;
+  return {
+    type: 'referral_reward',
+    idempotencyKey: args.idempotencyKey,
+    ...(args.externalRef ? { externalRef: args.externalRef } : {}),
+    postings: [
+      debit(systemAccount('promo_expense', currency), amountMinor),
+      credit(customerWallet(referrerId, currency), amountMinor),
     ],
   };
 }

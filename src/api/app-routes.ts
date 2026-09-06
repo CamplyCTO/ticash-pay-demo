@@ -104,16 +104,23 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
         country: z.string().length(2).optional(),
         email: z.string().email().optional(),
         password: z.string().min(6).max(128).optional(),
+        referralCode: z.string().trim().min(4).max(16).optional(),
       })
       .parse(req.body);
     reply.status(201);
-    return auth.registerCustomer({
+    const result = await auth.registerCustomer({
       phone: b.phone,
       ...(b.name ? { name: b.name } : {}),
       ...(b.country ? { country: b.country.toUpperCase() } : {}),
       ...(b.email ? { email: b.email } : {}),
       ...(b.password ? { password: b.password } : {}),
     });
+    // Record who referred this new user (best-effort; never blocks signup). The bonus
+    // pays out later, on the referred user's FIRST real transaction.
+    if (b.referralCode && deps.referrals) {
+      void deps.referrals.service.record(result.user.externalId, b.referralCode).catch(() => {});
+    }
+    return result;
   });
 
   // Password login (email or phone + password) — no OTP.
@@ -245,6 +252,9 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       idempotencyKey: b.idempotencyKey ?? `app-xfer:${me.externalId}:${randomUUID()}`,
     });
     req.log.info({ audit: 'money.transfer', senderId: me.externalId, from: b.fromCurrency, to: b.toCurrency, correlationId: result.correlationId }, 'transfer initiated');
+    // Referral trigger: this may be the sender's first real transaction. Best-effort +
+    // idempotent (rewards the referrer once) — must never affect the send's result.
+    if (deps.referrals) void deps.referrals.service.onReferredUserTransacted(me.externalId).catch(() => {});
     return result;
   });
 
@@ -260,6 +270,16 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       } catch {
         return { valid: false, name: null, currency: null, error: true };
       }
+    });
+  }
+
+  // ---- Referral panel: the caller's shareable code, the current bonus, and their
+  // stats (how many signed up / became active / total earned). Code is allocated on
+  // first view and stays stable.
+  if (deps.referrals) {
+    app.get('/app/referral', async (req) => {
+      const me = await requireCustomer(req);
+      return deps.referrals!.service.infoFor(me.externalId);
     });
   }
 

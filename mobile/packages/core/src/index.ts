@@ -11,6 +11,7 @@ export {
   useAirtimeProducts,
   useSendTransfer,
   useRecipientLookup,
+  useReferral,
   useAirtimeTopup,
   useKycStart,
   useDepositPix,

@@ -36,6 +36,7 @@ export default function AppLayout() {
       <Tabs.Screen name="cashout" options={{ href: null }} />
       <Tabs.Screen name="topup" options={{ href: null }} />
       <Tabs.Screen name="kyc" options={{ href: null }} />
+      <Tabs.Screen name="referral" options={{ href: null }} />
     </Tabs>
   );
 }

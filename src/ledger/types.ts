@@ -14,7 +14,8 @@ export type AccountKind =
   | 'fx_position' // FX desk position per currency — system
   | 'payout_suspense' // funds owed to an outbound payout (e.g. MonCash) — system
   | 'provider_fee' // payout rail's fee taken on settlement (e.g. BenCash) — system
-  | 'withdrawal_suspense'; // USDT held for an outbound crypto withdrawal (off-ramp) — system
+  | 'withdrawal_suspense' // USDT held for an outbound crypto withdrawal (off-ramp) — system
+  | 'promo_expense'; // marketing/referral bonuses paid out to users — system (may go negative)
 
 /** Account kinds that may NOT carry a negative balance. */
 export const NON_NEGATIVE_KINDS: ReadonlySet<AccountKind> = new Set<AccountKind>([
@@ -51,6 +52,7 @@ export type TxType =
   | 'usdt_withdraw_hold' // customer requests a USDT withdrawal — wallet -> withdrawal_suspense
   | 'usdt_withdraw_settle' // admin confirms the USDT was sent on-chain — suspense -> settlement (+ fee)
   | 'usdt_withdraw_refund' // withdrawal rejected/failed — suspense -> wallet
+  | 'referral_reward' // referral bonus credited to the referrer — promo_expense -> wallet
   | 'reversal';
 
 /** One immutable double-entry line, pre-persistence. */

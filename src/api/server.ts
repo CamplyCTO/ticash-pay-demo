@@ -19,6 +19,7 @@ import {
   createSettingsStore,
   createCashoutStore,
   createWithdrawalStore,
+  createReferralStore,
 } from '../ledger/store-factory';
 import { SettingsStore } from '../settings/settings-store';
 import { RateService } from '../fx/rate-service';
@@ -52,6 +53,7 @@ import { ExpoPushSender } from '../push/push-sender';
 import { P2PService } from '../p2p/p2p-service';
 import { CashoutService } from '../cashout/cashout-service';
 import { WithdrawalService } from '../withdrawal/withdrawal-service';
+import { ReferralService } from '../referrals/referral-service';
 import { NowPaymentsAdapter } from '../deposits/nowpayments-adapter';
 import { registerRoutes } from './routes';
 import { registerAppRoutes } from './app-routes';
@@ -91,6 +93,8 @@ export interface ServerDeps {
   cashout?: { service: CashoutService };
   /** USDT withdrawal (off-ramp): customer requests → held → operator sends + settles. */
   withdrawal?: { service: WithdrawalService };
+  /** Referral / promo-code program (share a code → referrer earns on referred's 1st tx). */
+  referrals?: { service: ReferralService };
 }
 
 export function defaultDeps(): ServerDeps {
@@ -175,6 +179,9 @@ export function defaultDeps(): ServerDeps {
   deps.cashout = { service: new CashoutService(ledger, createCashoutStore(), config.cashout) };
   // USDT withdrawal (off-ramp): customer requests → USDT held → operator sends on-chain + settles.
   deps.withdrawal = { service: new WithdrawalService(ledger, createWithdrawalStore(), config.withdrawal) };
+  // Referral program: shareable code → referrer earns a (admin-set) bonus once the
+  // referred user makes their first real transaction. Bonus persisted in settings.
+  deps.referrals = { service: new ReferralService(createReferralStore(), ledger, settingsStore) };
   // USDT on-ramp (NOWPayments) — enabled once the API key is present.
   if (config.nowpayments.enabled) {
     deps.deposits = { gateway: new NowPaymentsAdapter(config.nowpayments), intents: createPaymentIntentStore(), events: createProviderEventStore(), callbackUrl: config.nowpayments.callbackUrl };

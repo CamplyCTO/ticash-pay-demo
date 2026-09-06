@@ -22,6 +22,17 @@ export class LedgerService {
     return this.store.post(ops.fundWallet(args));
   }
 
+  /** Credit a referral bonus to the referrer's wallet (from promo_expense). */
+  referralReward(args: {
+    referrerId: string;
+    currency: Currency;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    externalRef?: string;
+  }): Promise<PostedJournal> {
+    return this.store.post(ops.referralReward(args));
+  }
+
   cashIn(args: {
     agentId: string;
     customerId: string;

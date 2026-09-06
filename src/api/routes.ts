@@ -561,6 +561,21 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
     });
   }
 
+  // Referral bonus — admin-editable amount + currency (persisted). Paid to the REFERRER
+  // when a referred user makes their first real transaction. Set amount to 0 to pause.
+  if (deps.referrals) {
+    const referrals = deps.referrals.service;
+    app.get('/referral/bonus', async () => {
+      const b = await referrals.getBonus();
+      return { amountMinor: b.amountMinor.toString(), currency: b.currency };
+    });
+    app.post('/referral/bonus', async (req) => {
+      const b = z.object({ amount: amountSchema, currency: currencySchema }).parse(req.body);
+      const set = await referrals.setBonus(money(b.amount, b.currency), b.currency);
+      return { amountMinor: set.amountMinor.toString(), currency: set.currency };
+    });
+  }
+
   // TEMP DIAGNOSTIC (remove after go-live): the EGRESS IP the static-IP proxy presents to
   // external providers. A DigitalOcean floating IP (proxy inbound) can differ from the
   // droplet's outbound IP — so the IP to whitelist at DingConnect/BenCash is THIS one, not

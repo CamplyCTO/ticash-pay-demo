@@ -110,6 +110,17 @@ export interface RecipientInfo {
   error?: boolean;
 }
 
+/** Referral panel: the caller's shareable code, the current bonus, and their stats. */
+export interface ReferralInfo {
+  code: string;
+  bonus: { amountMinor: string; currency: Currency };
+  stats: {
+    referredCount: number; // people who signed up with this code
+    rewardedCount: number; // of those, how many became active (bonus paid)
+    earnedMinor: Record<string, string>; // currency -> total minor earned
+  };
+}
+
 export interface TxRow {
   transactionUid: string;
   type: string;

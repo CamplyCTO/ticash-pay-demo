@@ -56,6 +56,13 @@ export function ProfileScreen() {
           left={<View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="shield-checkmark-outline" size={18} color={t.colors.primary} /></View>}
           right={<Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />}
           onPress={() => router.push('/(app)/kyc')}
+        />
+        <ListItem
+          title={tr('referral.title')}
+          subtitle={tr('referral.yourCode')}
+          left={<View style={{ width: 40, height: 40, borderRadius: 999, backgroundColor: t.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="gift-outline" size={18} color={t.colors.primary} /></View>}
+          right={<Ionicons name="chevron-forward" size={18} color={t.colors.textMuted} />}
+          onPress={() => router.push('/(app)/referral')}
           divider={false}
         />
       </Card>

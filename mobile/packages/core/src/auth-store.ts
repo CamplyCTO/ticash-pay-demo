@@ -19,7 +19,7 @@ interface AuthState {
   /** Restore a session from the stored refresh token on app launch. */
   bootstrap: () => Promise<void>;
   /** Customer signup with profile + password; an OTP then verifies the phone. */
-  signUp: (input: { name: string; phone: string; country: string; email?: string; password: string }) => Promise<void>;
+  signUp: (input: { name: string; phone: string; country: string; email?: string; password: string; referralCode?: string }) => Promise<void>;
   /** Password login by email OR phone (no OTP). */
   loginPassword: (handle: string, password: string) => Promise<void>;
   /** Forgot password: send an OTP to the account's phone. */
@@ -59,9 +59,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async ({ name, phone, country, email, password }) => {
+  signUp: async ({ name, phone, country, email, password, referralCode }) => {
     // Creates the account + sends a phone-verification OTP. Session starts after verify.
-    await api.register({ name, phone, country, password, ...(email ? { email } : {}) });
+    await api.register({ name, phone, country, password, ...(email ? { email } : {}), ...(referralCode ? { referralCode } : {}) });
   },
 
   loginPassword: async (handle, password) => {

@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, PayoutRail, RecipientInfo, SendTransferInput, TransferPricing, TxRow, WithdrawalRequest } from '@ticash/api-client';
+import type { AgentOpInput, CashoutRequest, CreateOfferInput, Currency, KycLimit, Me, P2POffer, P2POrder, PayoutRail, RecipientInfo, ReferralInfo, SendTransferInput, TransferPricing, TxRow, WithdrawalRequest } from '@ticash/api-client';
 import { api } from './client';
 import { useAuthStore } from './auth-store';
 
@@ -20,6 +20,12 @@ function useAuthed() {
 export function useMe() {
   const enabled = useAuthed();
   return useQuery<Me>({ queryKey: ['me'], queryFn: () => api.me(), enabled });
+}
+
+/** Referral panel: the caller's shareable code, the current bonus, and their stats. */
+export function useReferral() {
+  const enabled = useAuthed();
+  return useQuery<ReferralInfo>({ queryKey: ['referral'], queryFn: () => api.referral(), enabled });
 }
 
 /** Live transfer economics for a corridor + amount (debounce the amount in the UI). */

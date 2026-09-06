@@ -15,6 +15,7 @@ import {
   type PublicUser,
   type RateQuote,
   type RecipientInfo,
+  type ReferralInfo,
   type SendTransferInput,
   type TransferPricing,
   type TransferResult,
@@ -65,7 +66,7 @@ export class TicashApi {
 
   // ---- auth (public) ----
   // Signup with profile + password; the OTP that follows verifies the phone.
-  register(input: { phone: string; name?: string; country?: string; email?: string; password?: string }): Promise<{ user: PublicUser }> {
+  register(input: { phone: string; name?: string; country?: string; email?: string; password?: string; referralCode?: string }): Promise<{ user: PublicUser }> {
     return this.request('POST', '/app/auth/register', { body: input });
   }
   // Password login by email OR phone (no OTP).
@@ -120,6 +121,11 @@ export class TicashApi {
   // confirmation BEFORE sending. Inquiry only — no money moves.
   lookupRecipient(recipient: string): Promise<RecipientInfo> {
     return this.request('POST', '/app/payout/lookup', { auth: true, body: { recipient } });
+  }
+
+  // Referral panel: the caller's shareable code, the current bonus, and their stats.
+  referral(): Promise<ReferralInfo> {
+    return this.request('GET', '/app/referral', { auth: true });
   }
 
   // History: the caller's own transactions.
