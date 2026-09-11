@@ -573,4 +573,20 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
       return { amountMinor: set.amountMinor.toString(), currency: set.currency };
     });
   }
+
+  // Admin-only NatCash recipient-lookup health check (behind the panel's basic-auth).
+  // Runs the SAME inquiry the app's Send screen uses, so we can tell apart a rail/proxy
+  // outage (error:true / ok:false) from a number that simply has no NatCash name
+  // (valid:false). Inquiry only — no money moves.
+  if (deps.payouts) {
+    app.get('/payouts/natcash/health', async (req) => {
+      const q = z.object({ recipient: z.string().trim().min(4).max(20) }).parse(req.query);
+      try {
+        const r = await deps.payouts!.service.verifyRecipient(q.recipient);
+        return { ok: true, ...r };
+      } catch (e) {
+        return { ok: false, error: String((e as Error)?.message ?? e).slice(0, 300) };
+      }
+    });
+  }
 }
