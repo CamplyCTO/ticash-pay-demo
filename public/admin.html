@@ -5,10 +5,14 @@
 <!-- Do NOT let Chrome/Google auto-translate this page: it rewrites the DOM and
      collides with the live innerHTML refresh, blanking the panel. Already in PT. -->
 <meta name="google" content="notranslate" />
+<!-- Declare the page is already dark → Chrome/Android "Auto Dark Mode" SKIPS it and
+     stops re-darkening the dark theme into invisible (dark-on-dark) text. -->
+<meta name="color-scheme" content="dark" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Ticash Pay · Painel Admin</title>
 <style>
   :root {
+    color-scheme: dark; /* opt into dark so browsers don't force-darken us into invisibility */
     --bg-0:#0a0f12; --bg-1:#111a1b; --bg-2:#17231f; --bg-3:#20302a; --border:#2a3a36;
     --text:#f4f4f5; --text-3:#9ca3af; --text-4:#6b7280;
     --emerald:#34d399; --emerald-deep:#059669; --emerald-bg:#0f3325;
