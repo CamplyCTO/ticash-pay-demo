@@ -33,14 +33,19 @@
   .kpi .l { font-size:10px; color:var(--text-4); margin-top:3px; text-transform:uppercase; letter-spacing:.4px; }
   .grid { display:grid; grid-template-columns:1.3fr 1fr; gap:18px; align-items:start; }
   .grid > * { min-width:0; }              /* let grid columns shrink instead of a long cell stretching the page */
-  .panel { background:var(--bg-1); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:18px; }
-  .panel > h2 { background:#000; color:var(--emerald); padding:10px 16px; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+  .panel { background:var(--bg-1); border:1px solid var(--border); border-radius:14px; overflow:hidden; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+  .panel > h2 { background:linear-gradient(180deg,var(--bg-2),var(--bg-1)); color:var(--emerald); padding:13px 16px; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border); }
   .panel .body { padding:14px 16px; }
   table { width:100%; border-collapse:collapse; }
   th { font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-4); text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
-  td { font-size:11px; padding:7px 8px; border-bottom:1px solid var(--border); color:var(--text); word-break:break-all; overflow-wrap:anywhere; }
-  td.mono, th.num { text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; }
-  td.num { text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; }
+  td { font-size:11px; padding:9px 12px; border-bottom:1px solid var(--border); color:var(--text); vertical-align:middle; }
+  tbody tr:hover { background:rgba(255,255,255,.03); }
+  th.num { text-align:right; }
+  td.mono { font-family:"JetBrains Mono",ui-monospace,monospace; overflow-wrap:anywhere; }
+  td.num { text-align:right; font-family:"JetBrains Mono",ui-monospace,monospace; white-space:nowrap; }
+  /* Account keys/refs can be long (even a pathological id) — wrap only when needed so a
+     single cell can never stretch the table/page, while normal keys stay on one line. */
+  td.muted { color:var(--text-4); overflow-wrap:anywhere; }
   tr:last-child td { border-bottom:none; }
   .cr { color:var(--emerald); } .db { color:var(--amber); }
   .chip { font-size:8.5px; font-weight:600; padding:2px 8px; border-radius:20px; }
@@ -63,6 +68,18 @@
   .toast { position:fixed; bottom:18px; right:18px; background:var(--bg-3); border:1px solid var(--border); border-left:3px solid var(--emerald); padding:10px 14px; border-radius:8px; font-size:12px; opacity:0; transition:opacity .2s; max-width:360px; }
   .toast.show { opacity:1; } .toast.err { border-left-color:var(--red); }
   .muted { color:var(--text-4); font-size:11px; }
+  .kpi .v { line-height:1.1; }
+  .tab { transition:background .15s,border-color .15s; }
+  .tab:hover { border-color:var(--emerald-deep); }
+  /* Responsive — Jean often opens the panel on his phone. */
+  @media (max-width:820px){
+    body { padding:14px 12px 48px; }
+    header.page { flex-wrap:wrap; gap:8px; }
+    .kpis { grid-template-columns:repeat(2,1fr); gap:10px; }
+    .grid { grid-template-columns:1fr; gap:14px; }
+    .recon { grid-template-columns:1fr 1fr; }
+    td.muted { max-width:180px; }
+  }
 </style>
 </head>
 <body class="notranslate">
