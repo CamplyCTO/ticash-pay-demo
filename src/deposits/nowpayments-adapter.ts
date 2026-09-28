@@ -39,7 +39,8 @@ export interface DepositIpn {
   paymentId: string;
   status: string; // waiting | confirming | confirmed | sending | partially_paid | finished | failed | refunded | expired
   finished: boolean; // true only on 'finished' (fully settled)
-  actuallyPaid?: string; // pay_currency amount actually received (for cross-check/logging)
+  outcomeAmount?: string; // NET the merchant actually receives after NOWPayments' fee — what we credit
+  actuallyPaid?: string; // GROSS the customer sent (before fee) — cross-check/logging only, do NOT credit
   payCurrency?: string;
   orderId?: string;
   raw: unknown;
@@ -104,6 +105,7 @@ export class NowPaymentsAdapter {
       paymentId,
       status,
       finished: status === 'finished',
+      ...(body.outcome_amount != null ? { outcomeAmount: String(body.outcome_amount) } : {}),
       ...(body.actually_paid != null ? { actuallyPaid: String(body.actually_paid) } : {}),
       ...(body.pay_currency ? { payCurrency: String(body.pay_currency) } : {}),
       ...(body.order_id ? { orderId: String(body.order_id) } : {}),

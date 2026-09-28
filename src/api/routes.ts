@@ -295,11 +295,13 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDeps): void {
         } else if (intent.status === 'paid') {
           result = { ok: true, alreadyCredited: ipn.paymentId };
         } else {
-          // Credit the EXACT USDT received (actually_paid from the HMAC-verified
-          // IPN) — trustworthy because signed, and fair to the user under any
-          // USD/USDT peg drift. Fall back to the recorded amount if omitted.
-          // Idempotent by provider payment id (a replay can't double-credit).
-          const creditMinor = usdtMinorOrNull(ipn.actuallyPaid) ?? intent.amountMinor;
+          // Credit the NET USDT the platform ACTUALLY receives (outcome_amount from
+          // the HMAC-verified IPN) — this is what NOWPayments forwards after its
+          // network+service fee. Crediting actually_paid (the gross the customer sent)
+          // would over-credit by the fee and make the platform lose money on every
+          // deposit (settlement account goes short). Fall back to gross, then the
+          // recorded amount, only if outcome is absent. Idempotent by payment id.
+          const creditMinor = usdtMinorOrNull(ipn.outcomeAmount) ?? usdtMinorOrNull(ipn.actuallyPaid) ?? intent.amountMinor;
           const posted = await ledger.fundWallet({
             customerId: intent.customerId,
             currency: intent.currency,

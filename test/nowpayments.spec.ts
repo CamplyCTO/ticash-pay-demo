@@ -138,21 +138,25 @@ describe('USDT deposit settlement (NOWPayments IPN → wallet)', () => {
     expect(recon.consistent).toBe(true);
   });
 
-  it('credits the EXACT USDT received (actually_paid), not the requested amount', async () => {
+  it('credits outcome_amount (NET received), NOT actually_paid (gross) — no platform loss on fees', async () => {
+    // Real case from prod: customer sent 13.177 (actually_paid) but NOWPayments' fee
+    // means the platform only receives 9.597847 (outcome_amount). We must credit the
+    // NET, else the settlement account goes short by the fee on every deposit.
     const me = await loginCustomer('+5511700000005');
-    await post('/app/usdt/deposit', { amount: '100' }, { authorization: me.token }); // requested 100
-    // The user actually sent 99.5 USDT (peg/network rounding) — credit exactly that.
-    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 99.5 });
+    await post('/app/usdt/deposit', { amount: '12' }, { authorization: me.token });
+    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 13.177, outcome_amount: 9.597847 });
     expect(res.statusCode).toBe(200);
-    expect(await bal(me.ext)).toBe(99_500000);
+    expect(await bal(me.ext)).toBe(9_597847); // the NET, not 13_177000
+    const recon = (await get('/reconciliation')).json();
+    expect(recon.balanced).toBe(true);
   });
 
-  it('falls back to the requested amount when actually_paid is absent', async () => {
+  it('falls back to actually_paid, then the requested amount, when outcome_amount is absent', async () => {
     const me = await loginCustomer('+5511700000006');
     await post('/app/usdt/deposit', { amount: '100' }, { authorization: me.token });
-    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20' });
+    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 99.5 });
     expect(res.statusCode).toBe(200);
-    expect(await bal(me.ext)).toBe(100_000000);
+    expect(await bal(me.ext)).toBe(99_500000); // no outcome_amount -> falls back to actually_paid
   });
 
   it('a forged/invalid signature is rejected with 401 and never credits', async () => {
