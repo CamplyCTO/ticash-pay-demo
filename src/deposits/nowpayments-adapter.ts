@@ -62,6 +62,10 @@ export class NowPaymentsAdapter {
       pay_currency: this.cfg.payCurrency,
       order_id: args.orderId,
       order_description: 'Ticash Pay USDT deposit',
+      // Fee paid by the customer (Option B): the network+service fee is added on top of
+      // what they must send, so the FULL requested amount reaches the platform and the
+      // customer's wallet is credited the full amount they asked to deposit.
+      is_fee_paid_by_user: true,
       ...(args.callbackUrl ? { ipn_callback_url: args.callbackUrl } : {}),
     };
     const res = await this.http.request({

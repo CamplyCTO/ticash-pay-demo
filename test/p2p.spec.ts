@@ -274,4 +274,25 @@ describe('P2P USDT escrow marketplace (WS-4)', () => {
     expect(resolved.status).toBe('released');
     expect(await ledger.getBalance({ ownerType: 'customer', ownerId: 'b1', kind: 'wallet', currency: 'USDT' })).toBe(4_900000n);
   });
+
+  it('auto-cancels an UNPAID order past its payment window, but NEVER a submitted (paid) one', async () => {
+    const ledger = new LedgerService(new InMemoryLedgerStore());
+    const store = new InMemoryP2PStore();
+    const svc = new P2PService(ledger, store, { asset: 'USDT', commissionBps: 200, confirmWindowMinutes: 30 });
+    await ledger.fundWallet({ customerId: 'm1', currency: 'USDT', amountMinor: 20_000000n, idempotencyKey: 'f1' });
+    const offer = await svc.createOffer({ merchantId: 'm1', fiatCurrency: 'BRL', pricePerUnit: '6', totalMinor: 20_000000n, methods: [{ type: 'moncash', label: 'MonCash', account: 'x' }] });
+    // A: unpaid + past due -> auto-cancel + restore reservation
+    const a = await svc.openOrder({ offerId: offer.id, buyerId: 'b1', assetMinor: 5_000000n });
+    await store.updateOrder(a.id, { timeoutAt: new Date(Date.now() - 1000).toISOString() });
+    // B: paid (submitted) + past due -> must NOT be auto-cancelled (only admin/release/dispute)
+    const b = await svc.openOrder({ offerId: offer.id, buyerId: 'b2', assetMinor: 5_000000n });
+    await svc.submitPayment({ orderId: b.id, buyerId: 'b2', proofRef: 'p' });
+    await store.updateOrder(b.id, { timeoutAt: new Date(Date.now() - 1000).toISOString() });
+
+    const n = await svc.expireUnpaidOrders();
+    expect(n).toBe(1);
+    const all = await svc.listAllOrders();
+    expect(all.find((o) => o.id === a.id)?.status).toBe('cancelled');
+    expect(all.find((o) => o.id === b.id)?.status).toBe('payment_submitted'); // untouched
+  });
 });

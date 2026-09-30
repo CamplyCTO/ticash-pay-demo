@@ -358,6 +358,21 @@ if (require.main === module) {
       const resumed = await deps.transfers.service.recover();
       if (resumed > 0) app.log.warn(`recovered ${resumed} incomplete transfer(s)`);
     }
+    // P2P: auto-cancel UNPAID orders past their payment window (release the seller's
+    // reservation) — on boot, then every minute. Best-effort; never blocks startup.
+    if (deps.p2p) {
+      const p2p = deps.p2p.service;
+      const sweepP2P = async () => {
+        try {
+          const n = await p2p.expireUnpaidOrders();
+          if (n > 0) app.log.warn(`p2p: auto-cancelled ${n} unpaid order(s) past timeout`);
+        } catch (e) {
+          app.log.error({ err: String((e as Error)?.message ?? e) }, 'p2p expiry sweep failed');
+        }
+      };
+      await sweepP2P();
+      setInterval(sweepP2P, 60_000).unref();
+    }
     const addr = await app.listen({ port: config.port, host: config.host });
     app.log.info(`Ticash Pay ledger API on ${addr} · admin at ${addr}/admin`);
   })().catch((err) => {

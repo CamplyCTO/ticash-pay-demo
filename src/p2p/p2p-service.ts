@@ -17,7 +17,7 @@ export interface P2PConfig {
 
 /** Default minutes a buyer has to pay after opening an order (when the seller
  *  doesn't set one on the offer). Independent of the seller-confirm window. */
-const DEFAULT_PAY_WINDOW_MIN = 15;
+const DEFAULT_PAY_WINDOW_MIN = 30;
 
 /**
  * Orchestrates the P2P USDT marketplace over the ledger (escrow) + the P2P store
@@ -240,6 +240,29 @@ export class P2PService {
     const now = Date.now();
     const submitted = await this.store.listOrdersByStatus('payment_submitted');
     return submitted.filter((o) => o.timeoutAt !== null && Date.parse(o.timeoutAt) < now);
+  }
+
+  /**
+   * Auto-cancel UNPAID orders (status 'created') past their payment window — restores
+   * the seller's escrow reservation so it isn't blocked forever by a buyer who never
+   * pays. Only 'created' orders (never 'payment_submitted' — once the buyer reports
+   * payment, only release/dispute applies, to avoid the "reject after paid" scam).
+   * Idempotent + isolated per order; safe to run on a timer. Returns # cancelled.
+   */
+  async expireUnpaidOrders(): Promise<number> {
+    const now = Date.now();
+    const created = await this.store.listOrdersByStatus('created');
+    let cancelled = 0;
+    for (const o of created) {
+      if (o.timeoutAt === null || Date.parse(o.timeoutAt) >= now) continue;
+      try {
+        await this.store.cancelOrder(o.id); // atomically restores the reservation
+        cancelled++;
+      } catch {
+        // raced with a manual cancel / payment report — leave it for the next sweep
+      }
+    }
+    return cancelled;
   }
 
   /** Admin resolution of a disputed or timed-out order. Never automatic. */

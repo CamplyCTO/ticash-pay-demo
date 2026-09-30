@@ -143,12 +143,20 @@ describe('USDT deposit settlement (NOWPayments IPN → wallet)', () => {
     // means the platform only receives 9.597847 (outcome_amount). We must credit the
     // NET, else the settlement account goes short by the fee on every deposit.
     const me = await loginCustomer('+5511700000005');
-    await post('/app/usdt/deposit', { amount: '12' }, { authorization: me.token });
-    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 13.177, outcome_amount: 9.597847 });
+    await post('/app/usdt/deposit', { amount: '100' }, { authorization: me.token });
+    // Customer sent 130 (actually_paid) but the fee means only 126.3 (outcome) reaches us.
+    const res = await ipn({ payment_id: 55555, payment_status: 'finished', pay_currency: 'usdttrc20', actually_paid: 130, outcome_amount: 126.3 });
     expect(res.statusCode).toBe(200);
-    expect(await bal(me.ext)).toBe(9_597847); // the NET, not 13_177000
+    expect(await bal(me.ext)).toBe(126_300000); // the NET (outcome), not 130 and not the requested 100
     const recon = (await get('/reconciliation')).json();
     expect(recon.balanced).toBe(true);
+  });
+
+  it('rejects a deposit below the 100 USDT minimum', async () => {
+    const me = await loginCustomer('+5511700000007');
+    const res = await post('/app/usdt/deposit', { amount: '50' }, { authorization: me.token });
+    expect(res.statusCode).toBe(400);
+    expect(await bal(me.ext)).toBe(0);
   });
 
   it('falls back to actually_paid, then the requested amount, when outcome_amount is absent', async () => {

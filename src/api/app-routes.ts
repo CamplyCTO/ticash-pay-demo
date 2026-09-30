@@ -573,6 +573,9 @@ export function registerAppRoutes(app: FastifyInstance, deps: ServerDeps): void 
       const b = z.object({ amount: amountSchema }).parse(req.body); // USDT
       const amountMinor = money(b.amount, 'USDT');
       if (amountMinor <= 0n) throw new RegistryError('amount must be positive', 'VALIDATION');
+      // Minimum deposit: crypto network+service fees dominate tiny amounts, so require $100.
+      const MIN_USDT_DEPOSIT_MINOR = 100_000000n; // 100 USDT (scale 6)
+      if (amountMinor < MIN_USDT_DEPOSIT_MINOR) throw new RegistryError('o depósito mínimo é 100 USDT', 'VALIDATION');
       const orderId = `dep-${me.externalId}-${randomUUID()}`;
       const created = await dep.gateway.createDeposit({ amountMinor, orderId, callbackUrl: dep.callbackUrl });
       // Record the intent BEFORE returning: the wallet is funded on settlement by
